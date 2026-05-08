@@ -1,20 +1,8 @@
-// encrypted-ixs/src/lib.rs
-// ─────────────────────────────────────────────────────────────────
-// Dark Pool Arcis circuits.
-// NOTE: all circuit code must live inside `#[encrypted] mod circuits`.
-// This is what arcium build compiles into ComputationDefinitionAccounts.
-//
-// Three circuits:
-//   1. init_vault_balance  — re-encrypt whale's vault under MXE key
-//   2. match_slice         — dark-pool fill logic (price check + fill)
-//   3. reveal_fill         — re-encrypt fill result back to whale
-// ─────────────────────────────────────────────────────────────────
-
-use arcis::prelude::*;
+use arcis::*;
 
 #[encrypted]
 mod circuits {
-    use arcis::prelude::*;
+    use arcis::*;
 
     // ── Shared data shapes ────────────────────────────────────────
 
@@ -37,16 +25,14 @@ mod circuits {
         pub new_vault_balance: u64,
     }
 
-    // ── 1. init_vault_balance ─────────────────────────────────────
-    // Whale calls this once on deposit.
-    // Input:  Enc<Shared, VaultState>  (frontend encrypts with RescueCipher)
-    // Output: Enc<Mxe, VaultState>     (only the MPC cluster can read this)
+    //1. init_vault_balance 
+    
     #[instruction]
     pub fn init_vault_balance(
         vault_ctxt: Enc<Shared, VaultState>,
     ) -> Enc<Mxe, VaultState> {
         let vault = vault_ctxt.to_arcis();
-        Mxe::from_arcis(VaultState {
+        Mxe::get().from_arcis(VaultState {
             remaining_balance: vault.remaining_balance,
             price_per_token:   vault.price_per_token,
         })
@@ -85,7 +71,7 @@ mod circuits {
                 cost,
                 new_vault_balance: new_balance,
             }),
-            Mxe::from_arcis(VaultState {
+            Mxe::get().from_arcis(VaultState {
                 remaining_balance: new_balance,
                 price_per_token:   vault.price_per_token,
             }),

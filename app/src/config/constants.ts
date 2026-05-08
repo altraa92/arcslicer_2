@@ -1,9 +1,8 @@
-// src/config/constants.ts
+
 
 import { PublicKey } from "@solana/web3.js";
 
-// Devnet USDC mint — God Key must be the mint authority
-// (use the mint you created yourself; or swap this for your own)
+// Devnet USDC mint God Key must be the mint authority)
 export const USDC_MINT = new PublicKey(
   "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
 );

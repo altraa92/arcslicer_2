@@ -1,9 +1,9 @@
-// app/vite.config.ts
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { nodePolyfills } from "vite-plugin-node-polyfills";
 
 export default defineConfig({
+  envDir: "../",
   plugins: [
     react(),
     nodePolyfills({
@@ -12,6 +12,8 @@ export default defineConfig({
     }),
   ],
   define: {
+    "process.browser": "true",
     "process.env": {},
+    "process.version": "\"\"",
   },
 });

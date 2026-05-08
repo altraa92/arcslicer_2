@@ -14,8 +14,18 @@ import {
   getExecutingPoolAccAddress,
   getComputationAccAddress,
 } from "@arcium-hq/client";
-import { randomBytes } from "crypto";
 import { useArciumCipher } from "./useArciumCipher";
+
+const randomBytes = (length: number) => {
+  const bytes = new Uint8Array(length);
+  globalThis.crypto.getRandomValues(bytes);
+  return bytes;
+};
+
+const compDefOffset = (name: string) => {
+  const offset = getCompDefAccOffset(name);
+  return new DataView(offset.buffer, offset.byteOffset, offset.byteLength).getUint32(0, true);
+};
 
 export type DepositStatus =
   | "idle" | "encrypting" | "sending" | "waiting" | "done" | "error";
@@ -86,7 +96,7 @@ export function useDepositVault(
             mempoolAccount:         getMempoolAccAddress(arciumEnv.arciumClusterOffset),
             executingPool:          getExecutingPoolAccAddress(arciumEnv.arciumClusterOffset),
             computationAccount:     getComputationAccAddress(arciumEnv.arciumClusterOffset, computationOffset),
-            compDefAccount:         getCompDefAccAddress(program.programId, getCompDefAccOffset("init_vault_balance")),
+            compDefAccount:         getCompDefAccAddress(program.programId, compDefOffset("init_vault_balance")),
             clusterAccount:         getClusterAccAddress(arciumEnv.arciumClusterOffset),
           })
           .rpc({ commitment: "confirmed" });

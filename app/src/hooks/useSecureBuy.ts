@@ -14,8 +14,18 @@ import {
   getExecutingPoolAccAddress,
   getComputationAccAddress,
 } from "@arcium-hq/client";
-import { randomBytes } from "crypto";
 import { useArciumCipher } from "./useArciumCipher";
+
+const randomBytes = (length: number) => {
+  const bytes = new Uint8Array(length);
+  globalThis.crypto.getRandomValues(bytes);
+  return bytes;
+};
+
+const compDefOffset = (name: string) => {
+  const offset = getCompDefAccOffset(name);
+  return new DataView(offset.buffer, offset.byteOffset, offset.byteLength).getUint32(0, true);
+};
 
 export type BuyStatus =
   | "idle" | "encrypting" | "sending" | "waiting" | "done" | "error";
@@ -109,7 +119,7 @@ export function useSecureBuy(
             mempoolAccount:     getMempoolAccAddress(arciumEnv.arciumClusterOffset),
             executingPool:      getExecutingPoolAccAddress(arciumEnv.arciumClusterOffset),
             computationAccount: getComputationAccAddress(arciumEnv.arciumClusterOffset, computationOffset),
-            compDefAccount:     getCompDefAccAddress(program.programId, getCompDefAccOffset("match_slice")),
+            compDefAccount:     getCompDefAccAddress(program.programId, compDefOffset("match_slice")),
             clusterAccount:     getClusterAccAddress(arciumEnv.arciumClusterOffset),
           })
           .rpc({ commitment: "confirmed" });

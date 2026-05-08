@@ -1,11 +1,3 @@
-// src/components/DarkPool.tsx
-// ──────────────────────────────────────────────────────────────────
-// Main UI — two panels:
-//   Left  → Whale: deposit + init encrypted vault
-//   Right → Buyer: submit encrypted buy order, see decrypted fill
-// Plus a devnet faucet button at the top.
-// ──────────────────────────────────────────────────────────────────
-
 import { useState, useEffect } from "react";
 import * as anchor from "@coral-xyz/anchor";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
@@ -16,7 +8,7 @@ import { useSecureBuy } from "../hooks/useSecureBuy";
 import { useFaucet } from "../hooks/useFaucet";
 import idl from "../idl/arcslicer_2.json";
 
-// ── helpers ───────────────────────────────────────────────────────
+ //helpers
 const fmt = (n: bigint, dec = 6) =>
   (Number(n) / 10 ** dec).toLocaleString(undefined, { maximumFractionDigits: 4 });
 
@@ -29,7 +21,7 @@ const LABEL: Record<string, string> = {
   error:      "Error",
 };
 
-// ── component ─────────────────────────────────────────────────────
+//component 
 export default function DarkPool() {
   const { connection } = useConnection();
   const wallet = useWallet();

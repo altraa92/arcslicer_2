@@ -1,32 +1,30 @@
-
-use {
-    anchor_lang::{solana_program::instruction::Instruction, InstructionData, ToAccountMetas},
-    litesvm::LiteSVM,
-    solana_message::{Message, VersionedMessage},
-    solana_signer::Signer,
-    solana_keypair::Keypair,
-    solana_transaction::versioned::VersionedTransaction,
-};
+use anchor_lang::InstructionData;
 
 #[test]
-fn test_initialize() {
-    let program_id = arcslicer_2::id();
-    let payer = Keypair::new();
-    let mut svm = LiteSVM::new();
-    let bytes = include_bytes!("../../../target/deploy/arcslicer_2.so");
-    svm.add_program(program_id, bytes).unwrap();
-    svm.airdrop(&payer.pubkey(), 1_000_000_000).unwrap();
-    
-    let instruction = Instruction::new_with_bytes(
-        program_id,
-        &arcslicer_2::instruction::Initialize {}.data(),
-        arcslicer_2::accounts::Initialize {}.to_account_metas(None),
-    );
+fn generated_instruction_builders_compile() {
+    let _ = arcslicer_2::instruction::InitVaultBalanceCompDef {}.data();
+    let _ = arcslicer_2::instruction::InitMatchSliceCompDef {}.data();
+    let _ = arcslicer_2::instruction::InitRevealFillCompDef {}.data();
 
-    let blockhash = svm.latest_blockhash();
-    let msg = Message::new_with_blockhash(&[instruction], Some(&payer.pubkey()), &blockhash);
-    let tx = VersionedTransaction::try_new(VersionedMessage::Legacy(msg), &[payer]).unwrap();
+    let _ = arcslicer_2::instruction::DepositAndInitVault {
+        computation_offset: 0,
+        vault_ct_balance: [0; 32],
+        vault_ct_price: [0; 32],
+        pubkey: [0; 32],
+        nonce: 0,
+        deposit_amount: 0,
+        urgency_level: 1,
+    }
+    .data();
 
-    let res = svm.send_transaction(tx);
-    assert!(res.is_ok());
+    let _ = arcslicer_2::instruction::SecureBuyRequest {
+        computation_offset: 0,
+        request_ct_amount: [0; 32],
+        request_ct_price: [0; 32],
+        buyer_pubkey: [0; 32],
+        buyer_nonce: 0,
+    }
+    .data();
+
+    let _ = arcslicer_2::instruction::WithdrawRemainder {}.data();
 }

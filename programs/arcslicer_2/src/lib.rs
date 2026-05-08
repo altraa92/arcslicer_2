@@ -9,6 +9,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 use arcium_anchor::prelude::*;
+use arcium_client::idl::arcium::types::CallbackAccount;
 
 declare_id!("8N8DZqLjpjmVey83Cy2BNKysBcBYvm9XHxpa7dyRsK9G");
 
@@ -105,7 +106,10 @@ pub mod arcslicer_2 {
             vec![InitVaultBalanceCallback::callback_ix(
                 computation_offset,
                 &ctx.accounts.mxe_account,
-                &[ctx.accounts.slicer_parent.key().as_ref()],
+                &[CallbackAccount {
+                    pubkey: ctx.accounts.slicer_parent.key(),
+                    is_writable: true,
+                }],
             )?],
             1,
             0,
@@ -135,7 +139,7 @@ pub mod arcslicer_2 {
         let parent = &mut ctx.accounts.slicer_parent;
         parent.encrypted_balance = o.ciphertexts[0];
         parent.encrypted_price   = o.ciphertexts[1];
-        parent.vault_nonce       = u128::from_le_bytes(o.nonce);
+        parent.vault_nonce       = o.nonce;
 
         emit!(VaultInitialised { owner: parent.owner });
         Ok(())
@@ -182,8 +186,14 @@ pub mod arcslicer_2 {
                 computation_offset,
                 &ctx.accounts.mxe_account,
                 &[
-                    ctx.accounts.slicer_parent.key().as_ref(),
-                    ctx.accounts.child_slice.key().as_ref(),
+                    CallbackAccount {
+                        pubkey: ctx.accounts.slicer_parent.key(),
+                        is_writable: true,
+                    },
+                    CallbackAccount {
+                        pubkey: ctx.accounts.child_slice.key(),
+                        is_writable: true,
+                    },
                 ],
             )?],
             1,
@@ -212,12 +222,14 @@ pub mod arcslicer_2 {
             Err(_) => return Err(ErrorCode::AbortedComputation.into()),
         };
 
-        // field_0 = Enc<Shared, MatchResult> — buyer decrypts client-side
-        // field_1 = Enc<Mxe, VaultState>     — updated vault stays encrypted
+        // match_slice returns a tuple wrapped in field_0 by the generated Arcium output type.
+        let result_output = &o.field_0.field_0; // Enc<Shared, MatchResult>
+        let vault_output = &o.field_0.field_1;  // Enc<Mxe, VaultState>
+
         let parent = &mut ctx.accounts.slicer_parent;
-        parent.encrypted_balance = o.field_1.ciphertexts[0];
-        parent.encrypted_price   = o.field_1.ciphertexts[1];
-        parent.vault_nonce       = u128::from_le_bytes(o.field_1.nonce);
+        parent.encrypted_balance = vault_output.ciphertexts[0];
+        parent.encrypted_price   = vault_output.ciphertexts[1];
+        parent.vault_nonce       = vault_output.nonce;
 
         ctx.accounts.child_slice.is_filled = true;
 
@@ -225,10 +237,10 @@ pub mod arcslicer_2 {
         emit!(MatchResultEvent {
             parent:                   parent.key(),
             child:                    ctx.accounts.child_slice.key(),
-            filled_amount_ciphertext: o.field_0.ciphertexts[0],
-            cost_ciphertext:          o.field_0.ciphertexts[1],
-            new_balance_ciphertext:   o.field_0.ciphertexts[2],
-            result_nonce:             o.field_0.nonce,
+            filled_amount_ciphertext: result_output.ciphertexts[0],
+            cost_ciphertext:          result_output.ciphertexts[1],
+            new_balance_ciphertext:   result_output.ciphertexts[2],
+            result_nonce:             result_output.nonce.to_le_bytes(),
         });
         Ok(())
     }
@@ -276,8 +288,17 @@ pub mod arcslicer_2 {
 pub struct InitVaultBalanceCompDef<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
-    #[account(address = derive_mxe_pda!())]
-    pub mxe_account: Account<'info, MXEAccount>,
+    #[account(mut, address = derive_mxe_pda!())]
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
+    #[account(mut, address = derive_comp_def_pda!(COMP_DEF_OFFSET_INIT_VAULT))]
+    /// CHECK: initialized and checked by the Arcium program.
+    pub comp_def_account: UncheckedAccount<'info>,
+    #[account(mut, address = derive_mxe_lut_pda!(mxe_account.lut_offset_slot))]
+    /// CHECK: checked by the Arcium program.
+    pub address_lookup_table: UncheckedAccount<'info>,
+    #[account(address = LUT_PROGRAM_ID)]
+    /// CHECK: checked by the Arcium program.
+    pub lut_program: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
     pub arcium_program: Program<'info, Arcium>,
 }
@@ -287,8 +308,17 @@ pub struct InitVaultBalanceCompDef<'info> {
 pub struct InitMatchSliceCompDef<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
-    #[account(address = derive_mxe_pda!())]
-    pub mxe_account: Account<'info, MXEAccount>,
+    #[account(mut, address = derive_mxe_pda!())]
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
+    #[account(mut, address = derive_comp_def_pda!(COMP_DEF_OFFSET_MATCH_SLICE))]
+    /// CHECK: initialized and checked by the Arcium program.
+    pub comp_def_account: UncheckedAccount<'info>,
+    #[account(mut, address = derive_mxe_lut_pda!(mxe_account.lut_offset_slot))]
+    /// CHECK: checked by the Arcium program.
+    pub address_lookup_table: UncheckedAccount<'info>,
+    #[account(address = LUT_PROGRAM_ID)]
+    /// CHECK: checked by the Arcium program.
+    pub lut_program: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
     pub arcium_program: Program<'info, Arcium>,
 }
@@ -298,15 +328,24 @@ pub struct InitMatchSliceCompDef<'info> {
 pub struct InitRevealFillCompDef<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
-    #[account(address = derive_mxe_pda!())]
-    pub mxe_account: Account<'info, MXEAccount>,
+    #[account(mut, address = derive_mxe_pda!())]
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
+    #[account(mut, address = derive_comp_def_pda!(COMP_DEF_OFFSET_REVEAL_FILL))]
+    /// CHECK: initialized and checked by the Arcium program.
+    pub comp_def_account: UncheckedAccount<'info>,
+    #[account(mut, address = derive_mxe_lut_pda!(mxe_account.lut_offset_slot))]
+    /// CHECK: checked by the Arcium program.
+    pub address_lookup_table: UncheckedAccount<'info>,
+    #[account(address = LUT_PROGRAM_ID)]
+    /// CHECK: checked by the Arcium program.
+    pub lut_program: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
     pub arcium_program: Program<'info, Arcium>,
 }
 
 // ---- deposit_and_init_vault ----------------------------------------
 
-#[queue_computation_accounts("init_vault_balance", payer)]
+#[queue_computation_accounts("init_vault_balance", owner)]
 #[derive(Accounts)]
 #[instruction(computation_offset: u64)]
 pub struct DepositAndInitVault<'info> {
@@ -320,7 +359,7 @@ pub struct DepositAndInitVault<'info> {
         seeds = [b"slicer_parent", owner.key().as_ref(), mint.key().as_ref()],
         bump,
     )]
-    pub slicer_parent: Account<'info, SlicerParent>,
+    pub slicer_parent: Box<Account<'info, SlicerParent>>,
 
     /// CHECK: used only for PDA seed
     pub mint: AccountInfo<'info>,
@@ -328,7 +367,7 @@ pub struct DepositAndInitVault<'info> {
     pub target_mint: AccountInfo<'info>,
 
     #[account(mut)]
-    pub depositor_token_account: Account<'info, TokenAccount>,
+    pub depositor_token_account: Box<Account<'info, TokenAccount>>,
 
     #[account(
         init_if_needed,
@@ -338,7 +377,7 @@ pub struct DepositAndInitVault<'info> {
         seeds = [b"vault", owner.key().as_ref(), mint.key().as_ref()],
         bump,
     )]
-    pub vault_token_account: Account<'info, TokenAccount>,
+    pub vault_token_account: Box<Account<'info, TokenAccount>>,
 
     #[account(
         init_if_needed,
@@ -348,9 +387,9 @@ pub struct DepositAndInitVault<'info> {
         bump,
         address = derive_sign_pda!(),
     )]
-    pub sign_pda_account: Account<'info, ArciumSignerAccount>,
+    pub sign_pda_account: Box<Account<'info, ArciumSignerAccount>>,
     #[account(address = derive_mxe_pda!())]
-    pub mxe_account: Account<'info, MXEAccount>,
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
     #[account(mut, address = derive_mempool_pda!(mxe_account, ErrorCode::ClusterNotSet))]
     /// CHECK: checked by arcium
     pub mempool_account: UncheckedAccount<'info>,
@@ -361,13 +400,13 @@ pub struct DepositAndInitVault<'info> {
     /// CHECK: checked by arcium
     pub computation_account: UncheckedAccount<'info>,
     #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_INIT_VAULT))]
-    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    pub comp_def_account: Box<Account<'info, ComputationDefinitionAccount>>,
     #[account(mut, address = derive_cluster_pda!(mxe_account, ErrorCode::ClusterNotSet))]
-    pub cluster_account: Account<'info, Cluster>,
+    pub cluster_account: Box<Account<'info, Cluster>>,
     #[account(mut, address = ARCIUM_FEE_POOL_ACCOUNT_ADDRESS)]
-    pub pool_account: Account<'info, FeePool>,
+    pub pool_account: Box<Account<'info, FeePool>>,
     #[account(mut, address = ARCIUM_CLOCK_ACCOUNT_ADDRESS)]
-    pub clock_account: Account<'info, ClockAccount>,
+    pub clock_account: Box<Account<'info, ClockAccount>>,
 
     pub token_program:  Program<'info, Token>,
     pub system_program: Program<'info, System>,
@@ -392,12 +431,12 @@ pub struct InitVaultBalanceCallback<'info> {
     /// CHECK: sysvar
     pub instructions_sysvar: AccountInfo<'info>,
     #[account(mut)]
-    pub slicer_parent: Account<'info, SlicerParent>,
+    pub slicer_parent: Box<Account<'info, SlicerParent>>,
 }
 
 // ---- secure_buy_request ------------------------------------------
 
-#[queue_computation_accounts("match_slice", payer)]
+#[queue_computation_accounts("match_slice", buyer)]
 #[derive(Accounts)]
 #[instruction(computation_offset: u64)]
 pub struct SecureBuyRequest<'info> {
@@ -418,7 +457,7 @@ pub struct SecureBuyRequest<'info> {
         seeds = [b"child_slice", slicer_parent.key().as_ref(), buyer.key().as_ref()],
         bump,
     )]
-    pub child_slice: Account<'info, ChildSlice>,
+    pub child_slice: Box<Account<'info, ChildSlice>>,
 
     #[account(
         init_if_needed,
@@ -428,9 +467,9 @@ pub struct SecureBuyRequest<'info> {
         bump,
         address = derive_sign_pda!(),
     )]
-    pub sign_pda_account: Account<'info, ArciumSignerAccount>,
+    pub sign_pda_account: Box<Account<'info, ArciumSignerAccount>>,
     #[account(address = derive_mxe_pda!())]
-    pub mxe_account: Account<'info, MXEAccount>,
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
     #[account(mut, address = derive_mempool_pda!(mxe_account, ErrorCode::ClusterNotSet))]
     /// CHECK: checked by arcium
     pub mempool_account: UncheckedAccount<'info>,
@@ -441,13 +480,13 @@ pub struct SecureBuyRequest<'info> {
     /// CHECK: checked by arcium
     pub computation_account: UncheckedAccount<'info>,
     #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_MATCH_SLICE))]
-    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    pub comp_def_account: Box<Account<'info, ComputationDefinitionAccount>>,
     #[account(mut, address = derive_cluster_pda!(mxe_account, ErrorCode::ClusterNotSet))]
-    pub cluster_account: Account<'info, Cluster>,
+    pub cluster_account: Box<Account<'info, Cluster>>,
     #[account(mut, address = ARCIUM_FEE_POOL_ACCOUNT_ADDRESS)]
-    pub pool_account: Account<'info, FeePool>,
+    pub pool_account: Box<Account<'info, FeePool>>,
     #[account(mut, address = ARCIUM_CLOCK_ACCOUNT_ADDRESS)]
-    pub clock_account: Account<'info, ClockAccount>,
+    pub clock_account: Box<Account<'info, ClockAccount>>,
 
     pub system_program: Program<'info, System>,
     pub arcium_program: Program<'info, Arcium>,

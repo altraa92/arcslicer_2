@@ -1,10 +1,13 @@
-// app/src/hooks/useArciumCipher.ts
-
 import { useState, useCallback, useRef } from "react";
 import { RescueCipher, getMXEPublicKey } from "@arcium-hq/client";
 import { x25519 } from "@noble/curves/ed25519";
 import * as anchor from "@coral-xyz/anchor";
-import { randomBytes } from "crypto";
+
+const randomBytes = (length: number) => {
+  const bytes = new Uint8Array(length);
+  globalThis.crypto.getRandomValues(bytes);
+  return bytes;
+};
 
 // Anchor expects [u8; 32] which maps to number[] in TS
 export interface EncryptedU64Pair {
@@ -47,7 +50,7 @@ export function useArciumCipher(
     (value0: bigint, value1: bigint): EncryptedU64Pair => {
       if (!sessionRef.current) throw new Error("Cipher not initialised");
       const { cipher, publicKey } = sessionRef.current;
-      const rawNonce    = new Uint8Array(randomBytes(16));
+      const rawNonce    = randomBytes(16);
       const ciphertexts = cipher.encrypt([value0, value1], rawNonce);
       // Force each ciphertext to number[] regardless of what the library returns
       const ct0: number[] = Array.from(new Uint8Array(Buffer.from(ciphertexts[0])).slice(0, 32));
@@ -67,7 +70,7 @@ export function useArciumCipher(
     (ct0: number[], ct1: number[], nonce: number[]): [bigint, bigint] => {
       if (!sessionRef.current) throw new Error("Cipher not initialised");
       const result = sessionRef.current.cipher.decrypt(
-        [new Uint8Array(ct0), new Uint8Array(ct1)],
+        [ct0, ct1],
         new Uint8Array(nonce)
       );
       return [result[0], result[1]];
