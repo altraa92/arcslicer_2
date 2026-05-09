@@ -1,12 +1,12 @@
-// app/src/hooks/useSecureBuy.ts
+/**
+ * useSecureBuy.ts
+ */
 
 import { useState, useCallback } from "react";
 import * as anchor from "@coral-xyz/anchor";
 import { PublicKey } from "@solana/web3.js";
 import {
   awaitComputationFinalization,
-  getArciumEnv,
-  getCompDefAccOffset,
   getCompDefAccAddress,
   getClusterAccAddress,
   getMXEAccAddress,
@@ -14,18 +14,10 @@ import {
   getExecutingPoolAccAddress,
   getComputationAccAddress,
 } from "@arcium-hq/client";
-import { useArciumCipher } from "./useArciumCipher";
+import { type ArciumCipher } from "./useArciumCipher";
+import { randomBytes, compDefOffset } from "../config/constants";
 
-const randomBytes = (length: number) => {
-  const bytes = new Uint8Array(length);
-  globalThis.crypto.getRandomValues(bytes);
-  return bytes;
-};
-
-const compDefOffset = (name: string) => {
-  const offset = getCompDefAccOffset(name);
-  return new DataView(offset.buffer, offset.byteOffset, offset.byteLength).getUint32(0, true);
-};
+const CLUSTER_OFFSET = 456;
 
 export type BuyStatus =
   | "idle" | "encrypting" | "sending" | "waiting" | "done" | "error";
@@ -44,61 +36,55 @@ interface BuyParams {
 
 export function useSecureBuy(
   program:  anchor.Program<any> | null,
-  provider: anchor.AnchorProvider | null
+  provider: anchor.AnchorProvider | null,
+  cipher:   ArciumCipher
 ) {
   const [status,     setStatus]     = useState<BuyStatus>("idle");
   const [fillResult, setFillResult] = useState<FillResult | null>(null);
   const [txSig,      setTxSig]      = useState<string | null>(null);
   const [error,      setError]      = useState<string | null>(null);
 
-  const { init: initCipher, ready, encryptU64Pair, decryptU64Pair } =
-    useArciumCipher(provider, program?.programId ?? null);
-
   const submitBuy = useCallback(
     async (params: BuyParams) => {
       if (!program || !provider) return;
+      setError(null);
+
       try {
-        if (!ready) await initCipher();
+        if (!cipher.ready) await cipher.init();
         setStatus("encrypting");
 
-        const enc = encryptU64Pair(params.amountRequested, params.maxPrice);
+        const enc   = cipher.encryptU64Pair(params.amountRequested, params.maxPrice);
+        const buyer = provider.wallet.publicKey;
 
-        const arciumEnv = getArciumEnv();
         const computationOffset = new anchor.BN(
           Buffer.from(randomBytes(8)).readBigUInt64LE(0).toString()
         );
 
         const [childSlice] = PublicKey.findProgramAddressSync(
-          [
-            Buffer.from("child_slice"),
-            params.slicerParentKey.toBuffer(),
-            provider.wallet.publicKey.toBuffer(),
-          ],
+          [Buffer.from("child_slice"), params.slicerParentKey.toBuffer(), buyer.toBuffer()],
           program.programId
         );
 
-        // Subscribe BEFORE sending so no callback is missed
+        // Subscribe BEFORE sending so no event is missed
         const resultPromise = new Promise<FillResult>((resolve, reject) => {
           const listener = program.addEventListener("matchResultEvent", (event: any) => {
-            if (event.child.toBase58() === childSlice.toBase58()) {
-              program.removeEventListener(listener);
-              try {
-                const nonce = Array.from(event.resultNonce) as number[];
-                const [filledAmount, cost] = decryptU64Pair(
-                  Array.from(event.filledAmountCiphertext) as number[],
-                  Array.from(event.costCiphertext) as number[],
-                  nonce
-                );
-                const [newVaultBalance] = decryptU64Pair(
-                  Array.from(event.newBalanceCiphertext) as number[],
-                  Array.from(event.newBalanceCiphertext) as number[],
-                  nonce
-                );
-                resolve({ filledAmount, cost, newVaultBalance });
-              } catch (e) { reject(e); }
-            }
+            if (event.child.toBase58() !== childSlice.toBase58()) return;
+            program.removeEventListener(listener);
+            try {
+              const nonce = Array.from(event.resultNonce) as number[];
+              const [filledAmount, cost] = cipher.decryptU64Pair(
+                Array.from(event.filledAmountCiphertext) as number[],
+                Array.from(event.costCiphertext) as number[],
+                nonce
+              );
+              const newVaultBalance = cipher.decryptU64(
+                Array.from(event.newBalanceCiphertext) as number[],
+                nonce
+              );
+              resolve({ filledAmount, cost, newVaultBalance });
+            } catch (e) { reject(e); }
           });
-          setTimeout(() => reject(new Error("MPC timeout after 120s")), 120_000);
+          setTimeout(() => reject(new Error("MPC timeout: no result after 120s")), 120_000);
         });
 
         setStatus("sending");
@@ -106,21 +92,21 @@ export function useSecureBuy(
         const sig = await program.methods
           .secureBuyRequest(
             computationOffset,
-            enc.ciphertext0,   // number[] = [u8;32]
-            enc.ciphertext1,   // number[] = [u8;32]
-            enc.pubKey,        // number[] = [u8;32]
-            enc.nonce,         // BN = u128
+            enc.ciphertext0,
+            enc.ciphertext1,
+            enc.pubKey,
+            enc.nonce,
           )
           .accountsPartial({
-            buyer:              provider.wallet.publicKey,
+            buyer,
             slicerParent:       params.slicerParentKey,
             childSlice,
             mxeAccount:         getMXEAccAddress(program.programId),
-            mempoolAccount:     getMempoolAccAddress(arciumEnv.arciumClusterOffset),
-            executingPool:      getExecutingPoolAccAddress(arciumEnv.arciumClusterOffset),
-            computationAccount: getComputationAccAddress(arciumEnv.arciumClusterOffset, computationOffset),
+            mempoolAccount:     getMempoolAccAddress(CLUSTER_OFFSET),
+            executingPool:      getExecutingPoolAccAddress(CLUSTER_OFFSET),
+            computationAccount: getComputationAccAddress(CLUSTER_OFFSET, computationOffset),
             compDefAccount:     getCompDefAccAddress(program.programId, compDefOffset("match_slice")),
-            clusterAccount:     getClusterAccAddress(arciumEnv.arciumClusterOffset),
+            clusterAccount:     getClusterAccAddress(CLUSTER_OFFSET),
           })
           .rpc({ commitment: "confirmed" });
 
@@ -137,7 +123,7 @@ export function useSecureBuy(
         setStatus("error");
       }
     },
-    [program, provider, ready, initCipher, encryptU64Pair, decryptU64Pair]
+    [program, provider, cipher]
   );
 
   return { submitBuy, status, txSig, fillResult, error };

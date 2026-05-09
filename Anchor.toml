@@ -6,14 +6,23 @@ package_manager = "yarn"
 resolution = true
 skip-lint = false
 
-[programs.localnet]
+[programs.devnet]
 arcslicer_2 = "8N8DZqLjpjmVey83Cy2BNKysBcBYvm9XHxpa7dyRsK9G"
 
 [provider]
-cluster = "localnet"
+cluster = "devnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
 test = "cargo test"
+
+[test]
+startup_wait = 120000
+shutdown_wait = 2000
+
+[test.validator]
+bind_address = "127.0.0.1"
+rpc_port = 8899
+ledger = ".anchor/test-ledger"
 
 [hooks]

@@ -1,20 +1,23 @@
+/**
+ * useArciumCipher.ts
+ *
+ * Single cipher session — call this ONCE at the top level (DarkPool.tsx)
+ * and pass it down to both useDepositVault and useSecureBuy.
+ * If each hook creates its own session they get different shared secrets
+ * and decryption breaks silently.
+ */
+
 import { useState, useCallback, useRef } from "react";
 import { RescueCipher, getMXEPublicKey } from "@arcium-hq/client";
 import { x25519 } from "@noble/curves/ed25519";
 import * as anchor from "@coral-xyz/anchor";
+import { randomBytes } from "../config/constants";
 
-const randomBytes = (length: number) => {
-  const bytes = new Uint8Array(length);
-  globalThis.crypto.getRandomValues(bytes);
-  return bytes;
-};
-
-// Anchor expects [u8; 32] which maps to number[] in TS
 export interface EncryptedU64Pair {
-  ciphertext0: number[];
-  ciphertext1: number[];
-  pubKey:      number[];
-  nonce:       anchor.BN;
+  ciphertext0: number[];   // [u8; 32]
+  ciphertext1: number[];   // [u8; 32]
+  pubKey:      number[];   // [u8; 32] client x25519 public key
+  nonce:       anchor.BN;  // u128 as BN for Anchor
   rawNonce:    Uint8Array;
 }
 
@@ -32,6 +35,7 @@ export function useArciumCipher(
   const [error, setError] = useState<string | null>(null);
 
   const init = useCallback(async () => {
+    if (sessionRef.current) return; // already initialised
     if (!provider || !programId) return;
     try {
       const mxePubKey = await getMXEPublicKey(provider, programId);
@@ -43,20 +47,19 @@ export function useArciumCipher(
       setReady(true);
     } catch (e: any) {
       setError(e?.message ?? "Failed to init Arcium cipher");
+      throw e;
     }
   }, [provider, programId]);
 
   const encryptU64Pair = useCallback(
     (value0: bigint, value1: bigint): EncryptedU64Pair => {
-      if (!sessionRef.current) throw new Error("Cipher not initialised");
+      if (!sessionRef.current) throw new Error("Cipher not initialised — call init() first");
       const { cipher, publicKey } = sessionRef.current;
       const rawNonce    = randomBytes(16);
       const ciphertexts = cipher.encrypt([value0, value1], rawNonce);
-      // Force each ciphertext to number[] regardless of what the library returns
       const ct0: number[] = Array.from(new Uint8Array(Buffer.from(ciphertexts[0])).slice(0, 32));
       const ct1: number[] = Array.from(new Uint8Array(Buffer.from(ciphertexts[1])).slice(0, 32));
       const pk:  number[] = Array.from(publicKey);
-      // u128: combine lo (bytes 0-7) and hi (bytes 8-15)
       const buf  = Buffer.from(rawNonce);
       const lo   = buf.readBigUInt64LE(0);
       const hi   = buf.readBigUInt64LE(8);
@@ -69,14 +72,25 @@ export function useArciumCipher(
   const decryptU64Pair = useCallback(
     (ct0: number[], ct1: number[], nonce: number[]): [bigint, bigint] => {
       if (!sessionRef.current) throw new Error("Cipher not initialised");
-      const result = sessionRef.current.cipher.decrypt(
-        [ct0, ct1],
-        new Uint8Array(nonce)
-      );
+      const result = sessionRef.current.cipher.decrypt([ct0, ct1], new Uint8Array(nonce));
       return [result[0], result[1]];
     },
     []
   );
 
-  return { init, ready, error, encryptU64Pair, decryptU64Pair };
+  // For single-field decryption (e.g. newVaultBalance)
+  const decryptU64 = useCallback(
+    (ct: number[], nonce: number[]): bigint => {
+      if (!sessionRef.current) throw new Error("Cipher not initialised");
+      const dummy  = new Array(32).fill(0) as number[];
+      const result = sessionRef.current.cipher.decrypt([ct, dummy], new Uint8Array(nonce));
+      return result[0];
+    },
+    []
+  );
+
+  return { init, ready, error, encryptU64Pair, decryptU64Pair, decryptU64 };
 }
+
+// Exported type so hooks can accept cipher as a typed parameter
+export type ArciumCipher = ReturnType<typeof useArciumCipher>;

@@ -1,13 +1,23 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 use arcium_anchor::prelude::*;
-use arcium_client::idl::arcium::types::CallbackAccount;
+use arcium_client::idl::arcium::types::{CallbackAccount, CircuitSource, OffChainCircuitSource};
+use arcium_macros::circuit_hash;
 
 declare_id!("8N8DZqLjpjmVey83Cy2BNKysBcBYvm9XHxpa7dyRsK9G");
 
 const COMP_DEF_OFFSET_INIT_VAULT:  u32 = comp_def_offset("init_vault_balance");
 const COMP_DEF_OFFSET_MATCH_SLICE: u32 = comp_def_offset("match_slice");
 const COMP_DEF_OFFSET_REVEAL_FILL: u32 = comp_def_offset("reveal_fill");
+
+// ── Supabase public URLs for offchain circuit storage ─────────────
+// After uploading your .arcis files to Supabase:
+//   1. Create a public bucket called "circuits"
+//   2. Upload build/init_vault_balance.arcis, match_slice.arcis, reveal_fill.arcis
+//   3. Replace YOUR_SUPABASE_PROJECT_REF below with your actual project ref
+//      e.g. "abcdefghijklmnop" from https://abcdefghijklmnop.supabase.co
+const SUPABASE_BASE: &str =
+    "https://sszoguizxkwwfjihhrpx.supabase.co/storage/v1/object/public/circuits";
 
 pub mod state;
 use state::*;
@@ -18,25 +28,49 @@ pub mod arcslicer_2 {
 
     // ── One-time setup: register each circuit on-chain ────────────
     // Call each ONCE after deploy before any user transactions.
+    // Circuits are stored offchain (Supabase) to avoid expensive on-chain uploads.
+    // The circuit_hash! macro embeds the SHA-256 hash from build/*.hash at compile time
+    // so Arx nodes can verify the circuit wasn't tampered with.
 
     pub fn init_vault_balance_comp_def(
         ctx: Context<InitVaultBalanceCompDef>,
     ) -> Result<()> {
-        init_comp_def(ctx.accounts, None, None)?;
+        init_comp_def(
+            ctx.accounts,
+            Some(CircuitSource::OffChain(OffChainCircuitSource {
+                source: format!("{}/init_vault_balance.arcis", SUPABASE_BASE),
+                hash: circuit_hash!("init_vault_balance"),
+            })),
+            None,
+        )?;
         Ok(())
     }
 
     pub fn init_match_slice_comp_def(
         ctx: Context<InitMatchSliceCompDef>,
     ) -> Result<()> {
-        init_comp_def(ctx.accounts, None, None)?;
+        init_comp_def(
+            ctx.accounts,
+            Some(CircuitSource::OffChain(OffChainCircuitSource {
+                source: format!("{}/match_slice.arcis", SUPABASE_BASE),
+                hash: circuit_hash!("match_slice"),
+            })),
+            None,
+        )?;
         Ok(())
     }
 
     pub fn init_reveal_fill_comp_def(
         ctx: Context<InitRevealFillCompDef>,
     ) -> Result<()> {
-        init_comp_def(ctx.accounts, None, None)?;
+        init_comp_def(
+            ctx.accounts,
+            Some(CircuitSource::OffChain(OffChainCircuitSource {
+                source: format!("{}/reveal_fill.arcis", SUPABASE_BASE),
+                hash: circuit_hash!("reveal_fill"),
+            })),
+            None,
+        )?;
         Ok(())
     }
 
@@ -214,9 +248,8 @@ pub mod arcslicer_2 {
             Err(_) => return Err(ErrorCode::AbortedComputation.into()),
         };
 
-        // match_slice returns a tuple wrapped in field_0 by the generated Arcium output type.
         let result_output = &o.field_0.field_0; // Enc<Shared, MatchResult>
-        let vault_output = &o.field_0.field_1;  // Enc<Mxe, VaultState>
+        let vault_output  = &o.field_0.field_1;  // Enc<Mxe, VaultState>
 
         let parent = &mut ctx.accounts.slicer_parent;
         parent.encrypted_balance = vault_output.ciphertexts[0];
@@ -240,7 +273,7 @@ pub mod arcslicer_2 {
     // ── WHALE: withdraw remaining unsold tokens ────────────────────
     pub fn withdraw_remainder(ctx: Context<WithdrawRemainder>) -> Result<()> {
         let parent = &mut ctx.accounts.slicer_parent;
-        require!(!parent.is_withdrawn,      ErrorCode::AlreadyWithdrawn);
+        require!(!parent.is_withdrawn,         ErrorCode::AlreadyWithdrawn);
         require!(parent.remaining_balance > 0, ErrorCode::NothingToWithdraw);
 
         let amount = parent.remaining_balance;
@@ -271,9 +304,6 @@ pub mod arcslicer_2 {
 }
 
 // ── ACCOUNT STRUCTS ────────────────────────────────────────────────
-
-// ---- comp-def init (one-time each) --------------------------------
-// NOTE: correct macro is #[init_computation_definition_accounts]
 
 #[init_computation_definition_accounts("init_vault_balance", payer)]
 #[derive(Accounts)]

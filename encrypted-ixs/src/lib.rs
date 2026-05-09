@@ -4,7 +4,7 @@ use arcis::*;
 mod circuits {
     use arcis::*;
 
-    // ── Shared data shapes ────────────────────────────────────────
+    // Shared data shapes 
 
     /// Whale's vault: stored encrypted on-chain under MXE key
     pub struct VaultState {
@@ -38,14 +38,7 @@ mod circuits {
         })
     }
 
-    // ── 2. match_slice ────────────────────────────────────────────
-    // Core dark-pool matching. Both branches always execute (MPC
-    // requirement to prevent side-channel leaks — compiler handles this).
-    //
-    // Input:  Enc<Mxe, VaultState>   (from on-chain stored ciphertext)
-    //         Enc<Shared, BuyRequest> (buyer encrypts client-side)
-    // Output: Enc<Shared, MatchResult> (buyer decrypts this)
-    //         Enc<Mxe, VaultState>     (updated vault stays encrypted)
+    // ── 2. match_slice 
     #[instruction]
     pub fn match_slice(
         vault_ctxt:   Enc<Mxe, VaultState>,
@@ -78,9 +71,7 @@ mod circuits {
         )
     }
 
-    // ── 3. reveal_fill ────────────────────────────────────────────
-    // Optional: lets the whale see aggregate fill data.
-    // Re-encrypts the MXE-held MatchResult under the whale's shared key.
+    // 3. reveal_fill 
     #[instruction]
     pub fn reveal_fill(
         result_ctxt: Enc<Mxe, MatchResult>,
