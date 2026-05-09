@@ -219,7 +219,7 @@ export default function DarkPool() {
             Encrypt and submit order
           </button>
 
-          {bStatus !== "idle" && <StatusLine status={bStatus} error={bErr} tone="amber" />}
+          {bStatus !== "idle" && <StatusLine status={bStatus} error={bErr} tone="brass" />}
 
           {fillResult && (
             <div className="fill-ledger">
@@ -247,10 +247,10 @@ export default function DarkPool() {
 type StatusLineProps = {
   status: string;
   error?: string | null;
-  tone?: "cyan" | "amber";
+  tone?: "sand" | "brass";
 };
 
-function StatusLine({ status, error, tone = "cyan" }: StatusLineProps) {
+function StatusLine({ status, error, tone = "sand" }: StatusLineProps) {
   const stateClass = status === "done" ? "is-done" : status === "error" ? "is-error" : `is-active ${tone}`;
 
   return (
