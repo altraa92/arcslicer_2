@@ -106,10 +106,10 @@ export function useSecureBuy(
         const sig = await program.methods
           .secureBuyRequest(
             computationOffset,
-            enc.ciphertext0,   // number[] = [u8;32] ✓
-            enc.ciphertext1,   // number[] = [u8;32] ✓
-            enc.pubKey,        // number[] = [u8;32] ✓
-            enc.nonce,         // BN = u128 ✓
+            enc.ciphertext0,   // number[] = [u8;32]
+            enc.ciphertext1,   // number[] = [u8;32]
+            enc.pubKey,        // number[] = [u8;32]
+            enc.nonce,         // BN = u128
           )
           .accountsPartial({
             buyer:              provider.wallet.publicKey,

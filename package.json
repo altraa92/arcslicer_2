@@ -5,7 +5,8 @@
     "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check",
     "dev": "vite app",
     "build": "vite build app",
-    "test": "arcium test"
+    "test": "arcium test",
+    "setup:faucet-mint": "node scripts/setup-faucet-mint.mjs"
   },
   "dependencies": {
     "@arcium-hq/client": "0.9.7",

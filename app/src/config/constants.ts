@@ -1,10 +1,9 @@
-
-
 import { PublicKey } from "@solana/web3.js";
 
-// Devnet USDC mint God Key must be the mint authority)
+const DEFAULT_DEVNET_USDC_MINT = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
+
 export const USDC_MINT = new PublicKey(
-  "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
+  import.meta.env.VITE_USDC_MINT || DEFAULT_DEVNET_USDC_MINT
 );
 
 // Deployed program ID

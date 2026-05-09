@@ -16,4 +16,14 @@ export default defineConfig({
     "process.env": {},
     "process.version": "\"\"",
   },
+  server: {
+    watch: {
+      ignored: [
+        "**/target/**",
+        "**/.anchor/**",
+        "**/node_modules/**",
+        "**/build/**",
+      ],
+    },
+  },
 });

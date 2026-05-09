@@ -1,11 +1,3 @@
-// programs/arcslicer_2/src/lib.rs
-// ─────────────────────────────────────────────────────────────────
-// ArcSlicer Dark Pool — Solana coordinator program.
-// All encrypted logic lives in encrypted-ixs/src/lib.rs.
-// This program only: routes state, moves SPL tokens, queues
-// Arcium computations, and receives MPC callbacks.
-// ─────────────────────────────────────────────────────────────────
-
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 use arcium_anchor::prelude::*;

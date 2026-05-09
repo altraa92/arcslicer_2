@@ -4,8 +4,9 @@ import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { PhantomWalletAdapter } from "@solana/wallet-adapter-phantom";
 import DarkPool from "./components/DarkPool";
 
-// @ts-ignore — CSS side-effect import; resolved by Vite at build time
+// @ts-ignore - CSS side-effect import; resolved by Vite at build time
 import "@solana/wallet-adapter-react-ui/styles.css";
+import "./App.css";
 
 export default function App() {
   const endpoint = import.meta.env.VITE_RPC_URL;

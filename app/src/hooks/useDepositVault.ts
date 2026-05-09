@@ -78,10 +78,10 @@ export function useDepositVault(
         const sig = await program.methods
           .depositAndInitVault(
             computationOffset,
-            enc.ciphertext0,                                    // number[] = [u8;32] ✓
-            enc.ciphertext1,                                    // number[] = [u8;32] ✓
-            enc.pubKey,                                         // number[] = [u8;32] ✓
-            enc.nonce,                                          // BN = u128 ✓
+            enc.ciphertext0,                                    // number[] = [u8;32]
+            enc.ciphertext1,                                    // number[] = [u8;32]
+            enc.pubKey,                                         // number[] = [u8;32]
+            enc.nonce,                                          // BN = u128
             new anchor.BN(params.depositAmount.toString()),
             params.urgencyLevel
           )
