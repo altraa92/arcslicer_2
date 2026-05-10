@@ -476,7 +476,7 @@ pub struct SecureBuyRequest<'info> {
         init,
         payer = buyer,
         space = ChildSlice::LEN,
-        seeds = [b"child_slice", slicer_parent.key().as_ref(), buyer.key().as_ref()],
+        seeds = [b"child_slice", slicer_parent.key().as_ref(), buyer.key().as_ref(), &computation_offset.to_le_bytes()],
         bump,
     )]
     pub child_slice: Box<Account<'info, ChildSlice>>,

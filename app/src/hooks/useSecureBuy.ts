@@ -61,7 +61,7 @@ export function useSecureBuy(
         );
 
         const [childSlice] = PublicKey.findProgramAddressSync(
-          [Buffer.from("child_slice"), params.slicerParentKey.toBuffer(), buyer.toBuffer()],
+          [Buffer.from("child_slice"), params.slicerParentKey.toBuffer(), buyer.toBuffer(), computationOffset.toArrayLike(Buffer, "le", 8)],
           program.programId
         );
 
