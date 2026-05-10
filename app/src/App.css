@@ -675,3 +675,296 @@ button {
     border-radius: 1.35rem;
   }
 }
+
+
+
+
+
+
+
+
+/* ── Nav ─────────────────────────────────────────────────────────── */
+.pool-nav {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 1rem 2rem;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  flex-wrap: wrap;
+}
+.nav-tab {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.12);
+  color: var(--text-muted, #888);
+  padding: 0.45rem 1.1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.15s;
+}
+.nav-tab:hover { border-color: rgba(255,255,255,0.3); color: #fff; }
+.nav-tab.active { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.3); color: #fff; }
+.nav-tab.faucet-tab { margin-left: auto; }
+.faucet-log { font-size: 0.75rem; color: #888; }
+
+/* ── Market view ────────────────────────────────────────────────── */
+.market-view, .sell-view, .manage-view {
+  padding: 2rem;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.market-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1.5rem;
+}
+.market-header h2 { margin: 0 0 0.25rem; }
+.market-sub { color: #888; font-size: 0.88rem; max-width: 560px; margin: 0; }
+.refresh-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #ccc;
+  padding: 0.4rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+.refresh-btn:hover { border-color: #fff; color: #fff; }
+
+/* ── Vault grid ─────────────────────────────────────────────────── */
+.vault-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+.vault-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 1.25rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.vault-card:hover { border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.05); }
+.vault-card.selected { border-color: #4ade80; background: rgba(74,222,128,0.05); }
+.vault-card.own-vault { border-color: rgba(99,179,237,0.3); cursor: default; }
+.vault-card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.vault-label { font-size: 0.8rem; color: #888; }
+.urgency-badge {
+  font-size: 0.7rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.06);
+  color: #aaa;
+}
+.urgency-badge.u3 { background: rgba(239,68,68,0.15); color: #f87171; }
+.urgency-badge.u1 { background: rgba(99,179,237,0.15); color: #7dd3fc; }
+.vault-amounts { display: flex; gap: 1.5rem; margin-bottom: 1rem; }
+.vault-amounts div { display: flex; flex-direction: column; gap: 0.2rem; }
+.vault-amounts small { font-size: 0.72rem; color: #666; }
+.vault-amounts strong { font-size: 1rem; }
+.fill-bar-wrap { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; font-size: 0.75rem; color: #666; }
+.fill-bar { flex: 1; height: 4px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden; }
+.fill-bar-inner { height: 100%; background: #4ade80; border-radius: 2px; transition: width 0.3s; }
+.fill-bar-wrap.large .fill-bar { height: 8px; }
+.vault-card-footer { display: flex; justify-content: space-between; align-items: center; }
+.vault-card-footer code { font-size: 0.75rem; color: #666; }
+.select-hint, .own-hint { font-size: 0.72rem; color: #555; }
+.vault-card.selected .select-hint { color: #4ade80; }
+
+/* ── Buy panel ──────────────────────────────────────────────────── */
+.buy-panel {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(74,222,128,0.2);
+  border-radius: 14px;
+  padding: 1.75rem;
+  margin-top: 1rem;
+}
+.buy-panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.buy-panel-header h3 { margin: 0; }
+.close-btn { background: transparent; border: none; color: #666; font-size: 1.2rem; cursor: pointer; }
+.close-btn:hover { color: #fff; }
+.how-it-works {
+  background: rgba(255,255,255,0.03);
+  border-left: 3px solid rgba(255,255,255,0.1);
+  padding: 0.75rem 1rem;
+  border-radius: 0 6px 6px 0;
+  font-size: 0.83rem;
+  color: #888;
+  margin-bottom: 1.25rem;
+  line-height: 1.6;
+}
+.available-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  margin-bottom: 1.25rem;
+  font-size: 0.88rem;
+  color: #888;
+}
+.available-info strong { color: #fff; font-size: 1rem; }
+.field-hint { font-size: 0.72rem; color: #555; margin-top: 0.25rem; display: block; }
+
+/* ── Fill result ────────────────────────────────────────────────── */
+.fill-result {
+  margin-top: 1.25rem;
+  background: rgba(255,255,255,0.03);
+  border-radius: 10px;
+  padding: 1.25rem;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.fill-result-header { font-weight: 600; margin-bottom: 1rem; }
+.fill-metrics { display: flex; gap: 2rem; flex-wrap: wrap; }
+.fill-metrics div { display: flex; flex-direction: column; gap: 0.2rem; }
+.fill-metrics small { font-size: 0.72rem; color: #666; }
+.fill-metrics strong { font-size: 1.1rem; }
+
+/* ── Step tracker ───────────────────────────────────────────────── */
+.step-tracker {
+  display: flex;
+  gap: 0;
+  align-items: center;
+  margin-top: 1rem;
+  padding: 1rem;
+  background: rgba(255,255,255,0.02);
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.step-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  font-size: 0.78rem;
+  color: #555;
+  position: relative;
+}
+.step-item:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  width: calc(100% - 100px);
+  height: 1px;
+  background: rgba(255,255,255,0.06);
+  top: 50%;
+}
+.step-item.done { color: #4ade80; }
+.step-item.active { color: #fff; }
+.step-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  flex-shrink: 0;
+  z-index: 1;
+}
+.step-item.done .step-dot { background: rgba(74,222,128,0.2); color: #4ade80; }
+.step-item.active .step-dot { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); }
+.dot-pulse { width: 6px; height: 6px; background: #fff; border-radius: 50%; animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+.step-error { color: #f87171; font-size: 0.78rem; margin-top: 0.5rem; grid-column: 1/-1; }
+
+/* ── Sell view ──────────────────────────────────────────────────── */
+.view-header { margin-bottom: 2rem; }
+.view-header h2 { margin: 0 0 0.5rem; }
+.view-header p { color: #888; font-size: 0.88rem; max-width: 600px; margin: 0; }
+.explainer-steps { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 2rem; }
+.ex-step {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  padding: 1rem;
+  background: rgba(255,255,255,0.02);
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.05);
+}
+.ex-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+  color: #aaa;
+}
+.ex-step strong { font-size: 0.88rem; display: block; margin-bottom: 0.2rem; }
+.ex-step p { margin: 0; font-size: 0.8rem; color: #666; }
+
+/* ── Vault created ──────────────────────────────────────────────── */
+.vault-created {
+  margin-top: 1.25rem;
+  padding: 1.25rem;
+  background: rgba(74,222,128,0.05);
+  border: 1px solid rgba(74,222,128,0.2);
+  border-radius: 10px;
+}
+.vault-created strong { display: block; margin-bottom: 0.5rem; color: #4ade80; }
+.vault-created p { color: #888; font-size: 0.85rem; margin: 0 0 1rem; }
+.vault-address-card { background: rgba(0,0,0,0.2); border-radius: 6px; padding: 0.75rem; }
+.vault-address-card span { font-size: 0.75rem; color: #666; display: block; margin-bottom: 0.35rem; }
+.vault-address-card code { font-size: 0.78rem; word-break: break-all; cursor: pointer; color: #aaa; display: block; }
+.vault-address-card code:hover { color: #fff; }
+.vault-address-card small { font-size: 0.7rem; color: #444; }
+
+/* ── Manage view ────────────────────────────────────────────────── */
+.manage-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  padding: 1.75rem;
+  max-width: 480px;
+}
+.manage-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  font-size: 0.88rem;
+}
+.manage-row span { color: #888; }
+.manage-row strong { font-size: 1rem; }
+.manage-note {
+  margin: 1rem 0;
+  font-size: 0.78rem;
+  color: #555;
+  line-height: 1.6;
+}
+.withdraw-action {
+  width: 100%;
+  margin-top: 0.5rem;
+  background: rgba(255,255,255,0.05) !important;
+  border-color: rgba(255,255,255,0.15) !important;
+}
+.withdraw-action:not(:disabled):hover {
+  background: rgba(255,255,255,0.1) !important;
+}
+
+/* ── Shared ─────────────────────────────────────────────────────── */
+.connect-prompt, .empty-state {
+  text-align: center;
+  color: #555;
+  padding: 3rem 1rem;
+  font-size: 0.88rem;
+}
+.empty-state strong { color: #888; }
+.tx-link {
+  display: inline-block;
+  margin-top: 0.75rem;
+  font-size: 0.78rem;
+  color: #555;
+  text-decoration: none;
+}
+.tx-link:hover { color: #aaa; }

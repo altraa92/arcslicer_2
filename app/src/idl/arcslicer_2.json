@@ -557,6 +557,10 @@
               {
                 "kind": "account",
                 "path": "buyer"
+              },
+              {
+                "kind": "arg",
+                "path": "computation_offset"
               }
             ]
           }
