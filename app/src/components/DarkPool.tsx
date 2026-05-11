@@ -32,6 +32,9 @@ const fmtSol = (n: bigint) =>
   (Number(n) / 1e9).toLocaleString(undefined, { maximumFractionDigits: 4 }) +
   " SOL";
 
+const fmtStatSol = (n: bigint) => (n === 0n ? "—" : fmtSol(n));
+const fmtStatNumber = (n: number) => (n === 0 ? "—" : n.toString());
+
 const fmtCost = (raw: bigint) =>
   "$" +
   (Number(raw) / 1e6).toLocaleString(undefined, { maximumFractionDigits: 4 });
@@ -53,78 +56,6 @@ const shortKey = (k: PublicKey | string) => {
 
 type View = "market" | "sell" | "manage" | "history";
 
-const IconMarket = () => (
-  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-    <rect
-      x="1"
-      y="8"
-      width="3"
-      height="5"
-      rx="0.5"
-      fill="currentColor"
-      opacity="0.5"
-    />
-    <rect
-      x="5.5"
-      y="5"
-      width="3"
-      height="8"
-      rx="0.5"
-      fill="currentColor"
-      opacity="0.7"
-    />
-    <rect x="10" y="2" width="3" height="11" rx="0.5" fill="currentColor" />
-  </svg>
-);
-const IconSell = () => (
-  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-    <path
-      d="M7 1v9M3.5 7L7 10.5 10.5 7"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M2 12h10"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinecap="round"
-    />
-  </svg>
-);
-const IconVault = () => (
-  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-    <rect
-      x="1.5"
-      y="2.5"
-      width="11"
-      height="9"
-      rx="1.5"
-      stroke="currentColor"
-      strokeWidth="1.2"
-    />
-    <circle cx="7" cy="7" r="2" stroke="currentColor" strokeWidth="1.2" />
-    <path
-      d="M7 5V3.5M7 10.5V9M5 7H3.5M10.5 7H9"
-      stroke="currentColor"
-      strokeWidth="1.2"
-      strokeLinecap="round"
-    />
-  </svg>
-);
-const IconHistory = () => (
-  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-    <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.2" />
-    <path
-      d="M7 4v3.5l2 1.5"
-      stroke="currentColor"
-      strokeWidth="1.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
 const IconFaucet = () => (
   <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
     <path
@@ -204,6 +135,107 @@ const IconArrow = () => (
     />
   </svg>
 );
+const IconStatusDot = () => (
+  <svg className="status-dot" width="6" height="6" viewBox="0 0 6 6">
+    <circle cx="3" cy="3" r="3" fill="currentColor" />
+  </svg>
+);
+const IconWallet = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+    <path
+      d="M2 4.2h10a1 1 0 011 1v5.3a1 1 0 01-1 1H2a1 1 0 01-1-1V3.5a1 1 0 011-1h8.4"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M10 7.8h3"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+    />
+  </svg>
+);
+const IconCopy = () => (
+  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+    <rect
+      x="4"
+      y="4"
+      width="7"
+      height="7"
+      rx="1"
+      stroke="currentColor"
+      strokeWidth="1.1"
+    />
+    <path
+      d="M2 8.5V2.8a.8.8 0 01.8-.8h5.7"
+      stroke="currentColor"
+      strokeWidth="1.1"
+      strokeLinecap="round"
+    />
+  </svg>
+);
+const IconTheme = () => (
+  <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+    <circle cx="7.5" cy="7.5" r="3" stroke="currentColor" strokeWidth="1.2" />
+    <path
+      d="M7.5 1.5v1.2M7.5 12.3v1.2M1.5 7.5h1.2M12.3 7.5h1.2M3.25 3.25l.85.85M10.9 10.9l.85.85M11.75 3.25l-.85.85M4.1 10.9l-.85.85"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+    />
+  </svg>
+);
+const IconRefresh = ({ spinning = false }: { spinning?: boolean }) => (
+  <svg
+    className={spinning ? "refresh-icon is-spinning" : "refresh-icon"}
+    width="12"
+    height="12"
+    viewBox="0 0 12 12"
+    fill="none"
+  >
+    <path
+      d="M10 6A4 4 0 112.9 3.5"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+    />
+    <path
+      d="M2.5 1.7v2.4h2.4"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+const IconVaultEmpty = () => (
+  <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+    <rect
+      x="10"
+      y="16"
+      width="28"
+      height="22"
+      rx="3"
+      stroke="currentColor"
+      strokeWidth="1"
+    />
+    <path
+      d="M17 16v-3a7 7 0 0114 0v3"
+      stroke="currentColor"
+      strokeWidth="1"
+      strokeLinecap="round"
+    />
+    <circle cx="24" cy="27" r="5" stroke="currentColor" strokeWidth="1" />
+    <path
+      d="M24 22v10M19 27h10"
+      stroke="currentColor"
+      strokeWidth="1"
+      strokeLinecap="round"
+    />
+  </svg>
+);
 
 const SLICER_PARENT_LEN =
   8 + 32 + 32 + 32 + 32 + 8 + 8 + 1 + 8 + 1 + 1 + 32 + 32 + 16 + 1; // 244
@@ -216,6 +248,9 @@ export default function DarkPool() {
   const [provider, setProvider] = useState<anchor.AnchorProvider | null>(null);
   const [program, setProgram] = useState<anchor.Program<any> | null>(null);
   const [view, setView] = useState<View>("market");
+  const [theme, setTheme] = useState<"dark" | "light">(() =>
+    window.localStorage.getItem("arcslicer-theme") === "light" ? "light" : "dark"
+  );
 
   const [vaults, setVaults] = useState<VaultEntry[]>([]);
   const [loadingVaults, setLoadingVaults] = useState(false);
@@ -240,6 +275,10 @@ export default function DarkPool() {
     setProgram(new anchor.Program(idl as any, prov));
   }, [wallet.publicKey, wallet.signTransaction, connection]);
 
+  useEffect(() => {
+    window.localStorage.setItem("arcslicer-theme", theme);
+  }, [theme]);
+
   const cipher = useArciumCipher(provider, program ? PROGRAM_ID : null);
 
   const {
@@ -261,9 +300,7 @@ export default function DarkPool() {
 
   const {
     requestAirdrop,
-    requestSolAirdrop,
     isDropping,
-    isSolDrop,
     faucetLog,
   } = useFaucet();
 
@@ -435,598 +472,610 @@ export default function DarkPool() {
     0n
   );
   const filledOrders = purchases.filter((p) => p.filledAmount > 0n).length;
-  const walletState = wallet.publicKey ? shortKey(wallet.publicKey) : "Offline";
+  const walletState = wallet.publicKey ? shortKey(wallet.publicKey) : "—";
+  const copyUsdcMint = () => navigator.clipboard.writeText(USDC_MINT.toBase58());
 
   return (
-    <main className="darkpool-shell">
-      <header className="command-header">
-        <div className="brand-lockup">
-          <span className="eyebrow">Arcium MPC / Solana Devnet</span>
-          <h1>
-            Arc<span>Slicer</span>
-          </h1>
-          <p>
-            Private SOL/USDC liquidity. Price limits stay encrypted while fills
-            settle on Solana.
-          </p>
-        </div>
-        <div className="header-console">
-          <div className="wallet-frame">
-            <WalletMultiButton />
+    <main className="darkpool-shell" data-theme={theme}>
+      <header className="top-nav">
+        <div className="top-nav-inner">
+          <button
+            className="wordmark"
+            onClick={() => setView("market")}
+            aria-label="ArcSlicer home"
+          >
+            <span>ARC</span>
+            <strong>SLICER</strong>
+          </button>
+
+          <div className="network-pill">
+            <IconStatusDot />
+            <span>Arcium MPC · Solana Devnet</span>
+          </div>
+
+          <div className="nav-actions">
+            <button
+              className="theme-toggle"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            >
+              <IconTheme />
+              <span>{theme === "dark" ? "Light" : "Dark"}</span>
+            </button>
+            <div className="wallet-pill">
+              <IconWallet />
+              <WalletMultiButton />
+            </div>
           </div>
         </div>
       </header>
 
-      <section className="desk-stats" aria-label="Market status">
-        <div className="desk-stat">
+      <section className="stats-strip" aria-label="Market status">
+        <div className="stat-cell">
           <span>Live vaults</span>
-          <strong>{vaults.length}</strong>
+          <strong>{fmtStatNumber(vaults.length)}</strong>
         </div>
-        <div className="desk-stat">
+        <div className="stat-cell">
           <span>Open SOL</span>
-          <strong>{fmtSol(openLiquidity)}</strong>
+          <strong>{fmtStatSol(openLiquidity)}</strong>
         </div>
-        <div className="desk-stat">
+        <div className="stat-cell">
           <span>Filled SOL</span>
-          <strong>{fmtSol(filledLiquidity)}</strong>
+          <strong>{fmtStatSol(filledLiquidity)}</strong>
         </div>
-        <div className="desk-stat">
+        <div className="stat-cell">
           <span>Session fills</span>
-          <strong>{filledOrders}</strong>
+          <strong>{fmtStatNumber(filledOrders)}</strong>
         </div>
-        <div className="desk-stat">
+        <div className="stat-cell">
           <span>Wallet</span>
           <strong>{walletState}</strong>
         </div>
       </section>
 
-      <nav className="pool-nav">
-        {(
-          [
-            { key: "market", label: "Market", icon: <IconMarket /> },
-            { key: "sell", label: "Sell SOL", icon: <IconSell /> },
-            { key: "manage", label: "My Vault", icon: <IconVault /> },
-            { key: "history", label: "History", icon: <IconHistory /> },
-          ] as { key: View; label: string; icon: React.ReactNode }[]
-        ).map(({ key, label, icon }) => (
+      <nav className="tab-strip">
+        <div className="tab-list" aria-label="ArcSlicer views">
+          {(
+            [
+              { key: "market", label: "Market" },
+              { key: "sell", label: "Sell SOL" },
+              { key: "manage", label: "My Vault" },
+              { key: "history", label: "History" },
+            ] as { key: View; label: string }[]
+          ).map(({ key, label }) => (
+            <button
+              key={key}
+              className={`tab-button ${view === key ? "active" : ""}`}
+              onClick={() => setView(key)}
+            >
+              <span>{label}</span>
+              {key === "history" && purchases.length > 0 && (
+                <span className="tab-count">{purchases.length}</span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        <div className="funds-tools">
           <button
-            key={key}
-            className={`nav-tab ${view === key ? "active" : ""}`}
-            onClick={() => setView(key)}
+            className="ghost-button"
+            onClick={requestAirdrop}
+            disabled={isDropping || !wallet.publicKey}
+            title="2 SOL airdrop + 1000 USDC"
           >
-            {icon}
-            <span>{label}</span>
-            {key === "history" && purchases.length > 0 && (
-              <span className="nav-badge">{purchases.length}</span>
-            )}
+            <IconFaucet />
+            <span>{isDropping ? "Funding" : "Devnet Funds"}</span>
           </button>
-        ))}
-        <button
-          className="nav-tab faucet-tab"
-          onClick={requestAirdrop}
-          disabled={isDropping || !wallet.publicKey}
-          title="2 SOL airdrop + 1000 USDC"
-        >
-          <IconFaucet />
-          <span>{isDropping ? "Funding..." : "Devnet Funds"}</span>
-        </button>
-        {faucetLog && <span className="faucet-log">{faucetLog}</span>}
-        <div
-          className="token-pill"
-          title="Add this to Phantom under Devnet to see your USDC balance"
-        >
-          <span className="token-pill-label">Devnet USDC</span>
-          <code
-            className="token-pill-addr"
-            onClick={() => navigator.clipboard.writeText(USDC_MINT.toBase58())}
-            title="Click to copy"
-          >
-            {shortKey(USDC_MINT)}
-          </code>
-          <span className="token-pill-hint">copy mint</span>
+          <div className="mint-chip">
+            <span>Devnet USDC</span>
+            <code>{shortKey(USDC_MINT)}</code>
+            <button onClick={copyUsdcMint} title="Copy mint">
+              <IconCopy />
+              <span>copy mint</span>
+            </button>
+          </div>
+          {faucetLog && <span className="faucet-log">{faucetLog}</span>}
         </div>
       </nav>
 
-      {view === "market" && (
-        <section className={`market-view ${selectedVault ? "has-selection" : ""}`}>
-          <div className="market-header">
-            <div>
-              <h2>Active Vaults</h2>
-              <p className="market-sub">
-                Seller vaults are public, price floors stay private. Choose a
-                vault and submit your max USDC price.
-              </p>
-            </div>
-            <button
-              className="refresh-btn"
-              onClick={fetchVaults}
-              disabled={loadingVaults}
-            >
-              <span
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.35rem",
-                }}
+      <div className="app-content">
+        {view === "market" && (
+          <section className="market-view">
+            <div className="section-header">
+              <div>
+                <h2>Active Vaults</h2>
+                <p>
+                  Seller vaults are public — price floors stay encrypted. Choose
+                  a vault and submit your max USDC price.
+                </p>
+              </div>
+              <button
+                className="refresh-btn"
+                onClick={fetchVaults}
+                disabled={loadingVaults}
               >
-                <svg
-                  width="13"
-                  height="13"
-                  viewBox="0 0 13 13"
-                  fill="none"
-                  style={{
-                    animation: loadingVaults
-                      ? "spin 1s linear infinite"
-                      : "none",
-                  }}
-                >
-                  <path
-                    d="M11 6.5A4.5 4.5 0 112 6.5"
-                    stroke="currentColor"
-                    strokeWidth="1.3"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M11 3v3.5H7.5"
-                    stroke="currentColor"
-                    strokeWidth="1.3"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                {loadingVaults ? "Loading..." : "Refresh"}
-              </span>
-            </button>
-          </div>
-
-          {!wallet.publicKey && (
-            <div className="connect-prompt">
-              Connect your wallet to view and trade.
+                <IconRefresh spinning={loadingVaults} />
+                <span>{loadingVaults ? "Loading" : "Refresh"}</span>
+              </button>
             </div>
-          )}
-          {wallet.publicKey && !loadingVaults && vaults.length === 0 && (
-            <div className="empty-state">
-              No active vaults. Go to <strong>Sell SOL</strong> to create the
-              first one.
-            </div>
-          )}
 
-          <div className="vault-grid">
-            {vaults.map((vault) => {
-              const isOwn =
-                wallet.publicKey?.toBase58() === vault.owner.toBase58();
-              const isActive =
-                selectedVault?.pubkey.toBase58() === vault.pubkey.toBase58();
-              const fillPct =
-                vault.totalDeposit > 0n
-                  ? Math.round(
-                      Number((vault.filledAmount * 100n) / vault.totalDeposit)
-                    )
-                  : 0;
-              return (
-                <article
-                  key={vault.pubkey.toBase58()}
-                  className={`vault-card ${isOwn ? "own-vault" : ""} ${
-                    isActive ? "selected" : ""
-                  }`}
-                  onClick={() =>
-                    !isOwn && setSelectedVault(isActive ? null : vault)
-                  }
-                >
-                  <div className="vault-card-top">
-                    <span className="vault-label">
-                      {isOwn ? "Your vault" : `Vault ${shortKey(vault.pubkey)}`}
-                    </span>
-                    <span className={`urgency-badge u${vault.urgencyLevel}`}>
-                      {vault.urgencyLevel === 1
-                        ? "Stealth"
-                        : vault.urgencyLevel === 2
-                        ? "Standard"
-                        : "Aggressive"}
-                    </span>
-                  </div>
-                  <div className="vault-amounts">
-                    <div>
-                      <small>Available</small>
-                      <strong>{fmtSol(vault.remainingBalance)}</strong>
-                    </div>
-                    <div>
-                      <small>Total</small>
-                      <strong>{fmtSol(vault.totalDeposit)}</strong>
-                    </div>
-                  </div>
-                  <div className="fill-bar-wrap">
-                    <div className="fill-bar">
-                      <div
-                        className="fill-bar-inner"
-                        style={{ width: `${fillPct}%` }}
-                      />
-                    </div>
-                    <span>{fillPct}% filled</span>
-                  </div>
-                  <div className="vault-card-footer">
-                    <code>{shortKey(vault.pubkey)}</code>
-                    {!isOwn && (
-                      <span className="select-hint">
-                        {isActive ? (
-                          <>
-                            <IconCheck /> Selected
-                          </>
-                        ) : (
-                          <>
-                            Select <IconArrow />
-                          </>
-                        )}
-                      </span>
-                    )}
-                    {isOwn && (
-                      <span className="own-hint">Manage in My Vault</span>
-                    )}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
+            {!wallet.publicKey && (
+              <div className="empty-state">
+                <IconVaultEmpty />
+                <strong>Connect wallet to view vaults</strong>
+                <span>Market depth loads after wallet connection.</span>
+              </div>
+            )}
 
-          {selectedVault && (
-            <div className="buy-panel">
-              <div className="buy-panel-header">
-                <h3>Buy from {shortKey(selectedVault.pubkey)}</h3>
-                <button
-                  className="close-btn"
-                  onClick={() => setSelectedVault(null)}
-                  aria-label="Close buy panel"
-                >
-                  <IconClose />
+            {wallet.publicKey && loadingVaults && vaults.length === 0 && (
+              <div className="vault-rows" aria-label="Loading vaults">
+                {[0, 1, 2].map((item) => (
+                  <div key={item} className="vault-row skeleton-row" />
+                ))}
+              </div>
+            )}
+
+            {wallet.publicKey && !loadingVaults && vaults.length === 0 && (
+              <div className="empty-state">
+                <IconVaultEmpty />
+                <strong>No active vaults</strong>
+                <button className="empty-link" onClick={() => setView("sell")}>
+                  <span>Create a vault in Sell SOL</span>
+                  <IconArrow />
                 </button>
               </div>
-              <div className="how-it-works">
-                <IconLock />
-                <span>
-                  Encrypted price check through Arcium before settlement.
-                </span>
+            )}
+
+            {vaults.length > 0 && (
+              <div className="vault-rows">
+                {vaults.map((vault) => {
+                  const isOwn =
+                    wallet.publicKey?.toBase58() === vault.owner.toBase58();
+                  const isActive =
+                    selectedVault?.pubkey.toBase58() === vault.pubkey.toBase58();
+                  const fillPct =
+                    vault.totalDeposit > 0n
+                      ? Math.round(
+                          Number(
+                            (vault.filledAmount * 100n) / vault.totalDeposit
+                          )
+                        )
+                      : 0;
+                  return (
+                    <article
+                      key={vault.pubkey.toBase58()}
+                      className={`vault-row ${isOwn ? "own-vault" : ""} ${
+                        isActive ? "selected" : ""
+                      }`}
+                      onClick={() =>
+                        !isOwn && setSelectedVault(isActive ? null : vault)
+                      }
+                    >
+                      <div className="vault-row-main">
+                        <span>{isOwn ? "Your vault" : shortKey(vault.pubkey)}</span>
+                        <strong>{fmtSol(vault.remainingBalance)}</strong>
+                      </div>
+
+                      <div className="vault-row-status">
+                        <span className="live-badge">
+                          <IconStatusDot />
+                          Live
+                        </span>
+                        <code>{fillPct}% filled</code>
+                      </div>
+
+                      <div className="vault-row-meta">
+                        <span>Total</span>
+                        <strong>{fmtSol(vault.totalDeposit)}</strong>
+                      </div>
+
+                      <div
+                        className="vault-fill"
+                        style={
+                          { "--fill-pct": `${fillPct}%` } as React.CSSProperties
+                        }
+                      >
+                        <span />
+                      </div>
+
+                      <div className="vault-row-actions">
+                        {!isOwn ? (
+                          <>
+                            <input
+                              className="row-price-input"
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={isActive ? maxPriceUsdc : ""}
+                              onClick={(e) => e.stopPropagation()}
+                              onFocus={() => setSelectedVault(vault)}
+                              onChange={(e) => {
+                                setSelectedVault(vault);
+                                setMaxPriceUsdc(e.target.value);
+                              }}
+                              placeholder="Max USDC"
+                            />
+                            <button
+                              className="ghost-button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedVault(vault);
+                              }}
+                            >
+                              Submit Bid
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            className="ghost-button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setView("manage");
+                            }}
+                          >
+                            Manage
+                          </button>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
-              <div className="available-info">
-                <span>Available</span>
-                <strong>{fmtSol(selectedVault.remainingBalance)}</strong>
+            )}
+
+            {selectedVault && (
+              <div className="buy-panel">
+                <div className="panel-title-row">
+                  <div>
+                    <span>Private bid</span>
+                    <h3>{shortKey(selectedVault.pubkey)}</h3>
+                  </div>
+                  <button
+                    className="icon-button"
+                    onClick={() => setSelectedVault(null)}
+                    aria-label="Close buy panel"
+                  >
+                    <IconClose />
+                  </button>
+                </div>
+                <div className="panel-note">
+                  <IconLock />
+                  <span>Encrypted price check through Arcium before settlement.</span>
+                </div>
+                <div className="available-info">
+                  <span>Available</span>
+                  <strong>{fmtSol(selectedVault.remainingBalance)}</strong>
+                </div>
+                <div className="field-stack">
+                  <label className="control-field">
+                    <span>SOL amount to buy</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={buyAmtSol}
+                      onChange={(e) => setBuyAmtSol(e.target.value)}
+                      placeholder={`up to ${(
+                        Number(selectedVault.remainingBalance) / 1e9
+                      ).toFixed(3)}`}
+                    />
+                  </label>
+                  <label className="control-field">
+                    <span>Max price (USDC per SOL)</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={maxPriceUsdc}
+                      onChange={(e) => setMaxPriceUsdc(e.target.value)}
+                      placeholder="e.g. 155.00"
+                    />
+                  </label>
+                </div>
+                <button
+                  className="action-button buyer-action"
+                  onClick={handleBuy}
+                  disabled={
+                    !wallet.publicKey || !buyAmtSol || !maxPriceUsdc || buyBusy
+                  }
+                >
+                  {buyBusy ? "Processing" : "Encrypt and Submit Order"}
+                </button>
+                {bStatus !== "idle" && (
+                  <StepTracker status={bStatus} error={bErr} />
+                )}
+                {fillResult && (
+                  <div className="fill-result">
+                    <div
+                      className={`fill-result-header ${
+                        fillResult.filledAmount > 0n ? "filled" : "no-fill"
+                      }`}
+                    >
+                      {fillResult.filledAmount > 0n ? (
+                        <>
+                          <IconCheck /> Order filled
+                        </>
+                      ) : (
+                        <>No fill. Your max price was below the seller floor.</>
+                      )}
+                    </div>
+                    {fillResult.filledAmount > 0n && (
+                      <div className="fill-metrics">
+                        <div>
+                          <small>You received</small>
+                          <strong>{fmtSol(fillResult.filledAmount)}</strong>
+                        </div>
+                        <div>
+                          <small>Cost</small>
+                          <strong>{fmtCost(fillResult.cost)}</strong>
+                        </div>
+                        <div>
+                          <small>Effective price</small>
+                          <strong>
+                            {fmtEffectivePrice(
+                              fillResult.cost,
+                              fillResult.filledAmount
+                            )}
+                          </strong>
+                        </div>
+                      </div>
+                    )}
+                    {bSig && <TxLink signature={bSig} />}
+                  </div>
+                )}
               </div>
+            )}
+          </section>
+        )}
+
+        {view === "sell" && (
+          <section className="sell-view">
+            <div className="section-header">
+              <div>
+                <h2>Create Vault</h2>
+                <p>
+                  Deposit SOL and set a hidden floor. Buyers see size and fill
+                  status, not your price.
+                </p>
+              </div>
+            </div>
+            <div className="trade-panel seller-panel">
               <div className="field-stack">
                 <label className="control-field">
-                  <span>SOL amount to buy</span>
+                  <span>SOL to deposit</span>
                   <input
                     type="number"
                     min="0"
-                    step="0.01"
-                    value={buyAmtSol}
-                    onChange={(e) => setBuyAmtSol(e.target.value)}
-                    placeholder={`up to ${(
-                      Number(selectedVault.remainingBalance) / 1e9
-                    ).toFixed(3)}`}
+                    step="0.1"
+                    value={depositSol}
+                    onChange={(e) => setDepositSol(e.target.value)}
+                    placeholder="e.g. 10"
                   />
                 </label>
                 <label className="control-field">
-                  <span>Max price (USDC per SOL)</span>
+                  <span>Minimum price (USDC per SOL)</span>
                   <input
                     type="number"
                     min="0"
                     step="0.01"
-                    value={maxPriceUsdc}
-                    onChange={(e) => setMaxPriceUsdc(e.target.value)}
-                    placeholder="e.g. 155.00"
+                    value={priceUsdc}
+                    onChange={(e) => setPriceUsdc(e.target.value)}
+                    placeholder="e.g. 150.00"
                   />
-                  <small className="field-hint">
-                    <IconLock /> Encrypted before leaving your browser.
-                  </small>
+                </label>
+                <label className="control-field">
+                  <span>Fill urgency</span>
+                  <select
+                    value={urgency}
+                    onChange={(e) =>
+                      setUrgency(Number(e.target.value) as 1 | 2 | 3)
+                    }
+                  >
+                    <option value={1}>Stealth: slower, quieter</option>
+                    <option value={2}>Standard: balanced</option>
+                    <option value={3}>Aggressive: fastest fill</option>
+                  </select>
                 </label>
               </div>
               <button
-                className="action-button buyer-action"
-                onClick={handleBuy}
+                className="action-button seller-action"
+                onClick={handleDeposit}
                 disabled={
-                  !wallet.publicKey || !buyAmtSol || !maxPriceUsdc || buyBusy
+                  !wallet.publicKey || !depositSol || !priceUsdc || depositBusy
                 }
               >
-                {buyBusy ? "Processing..." : "Encrypt & submit order"}
+                {depositBusy ? "Processing" : "Encrypt and Deposit SOL"}
               </button>
-              {bStatus !== "idle" && (
-                <StepTracker status={bStatus} error={bErr} />
+              {dStatus !== "idle" && (
+                <StepTracker status={dStatus} error={dErr} />
               )}
-              {fillResult && (
-                <div className="fill-result">
-                  <div
-                    className={`fill-result-header ${
-                      fillResult.filledAmount > 0n ? "filled" : "no-fill"
-                    }`}
-                  >
-                    {fillResult.filledAmount > 0n ? (
-                      <>
-                        <IconCheck /> Order filled
-                      </>
-                    ) : (
-                      <>No fill. Your max price was below the seller's floor.</>
-                    )}
-                  </div>
-                  {fillResult.filledAmount > 0n && (
-                    <div className="fill-metrics">
-                      <div>
-                        <small>You received</small>
-                        <strong>{fmtSol(fillResult.filledAmount)}</strong>
-                      </div>
-                      <div>
-                        <small>Cost</small>
-                        <strong>{fmtCost(fillResult.cost)}</strong>
-                      </div>
-                      <div>
-                        <small>Effective price</small>
-                        <strong>
-                          {fmtEffectivePrice(
-                            fillResult.cost,
-                            fillResult.filledAmount
-                          )}
-                        </strong>
-                      </div>
-                    </div>
-                  )}
-                  {bSig && <TxLink signature={bSig} />}
-                </div>
-              )}
-            </div>
-          )}
-        </section>
-      )}
-
-      {view === "sell" && (
-        <section className="sell-view">
-          <div className="view-header">
-            <h2>Create a private vault</h2>
-            <p>
-              Deposit SOL and set a hidden floor. Buyers see size and fill
-              status, not your price.
-            </p>
-          </div>
-          <div className="explainer-steps">
-            {[
-              {
-                n: "1",
-                title: "Deposit SOL + set a hidden floor price",
-                body: "Your minimum price is encrypted before leaving your browser.",
-              },
-              {
-                n: "2",
-                title: "Buyers see your vault size, not your price",
-                body: "They submit their own encrypted max price.",
-              },
-              {
-                n: "3",
-                title: "The match runs privately",
-                body: "If the buyer's max price meets your floor, the order fills.",
-              },
-              {
-                n: "4",
-                title: "Withdraw unsold SOL anytime",
-                body: "Track fill progress and withdraw remainder in My Vault.",
-              },
-            ].map((s) => (
-              <div key={s.n} className="ex-step">
-                <span className="ex-num">{s.n}</span>
-                <div>
-                  <strong>{s.title}</strong>
-                  <p>{s.body}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="trade-panel seller-panel">
-            <div className="field-stack">
-              <label className="control-field">
-                <span>SOL to deposit</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  value={depositSol}
-                  onChange={(e) => setDepositSol(e.target.value)}
-                  placeholder="e.g. 10"
-                />
-              </label>
-              <label className="control-field">
-                <span>Minimum price (USDC per SOL)</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={priceUsdc}
-                  onChange={(e) => setPriceUsdc(e.target.value)}
-                  placeholder="e.g. 150.00"
-                />
-                <small className="field-hint">
-                  <IconLock /> Encrypted before sending.
-                </small>
-              </label>
-              <label className="control-field">
-                <span>Fill urgency</span>
-                <select
-                  value={urgency}
-                  onChange={(e) =>
-                    setUrgency(Number(e.target.value) as 1 | 2 | 3)
-                  }
-                >
-                  <option value={1}>Stealth: slower, quieter</option>
-                  <option value={2}>Standard: balanced</option>
-                  <option value={3}>Aggressive: fastest fill</option>
-                </select>
-              </label>
-            </div>
-            <button
-              className="action-button seller-action"
-              onClick={handleDeposit}
-              disabled={
-                !wallet.publicKey || !depositSol || !priceUsdc || depositBusy
-              }
-            >
-              {depositBusy ? "Processing..." : "Encrypt & deposit SOL"}
-            </button>
-            {dStatus !== "idle" && (
-              <StepTracker status={dStatus} error={dErr} />
-            )}
-            {dStatus === "done" && myVault && (
-              <div className="vault-created">
-                <strong>
-                  <IconCheck /> Vault created
-                </strong>
-                <p>
-                  Visible to buyers in the Market tab. Track fills and withdraw
-                  in My Vault.
-                </p>
-                <div className="vault-address-card">
-                  <span>Vault address</span>
-                  <code
-                    onClick={() =>
-                      navigator.clipboard.writeText(myVault.toBase58())
-                    }
-                  >
-                    {myVault.toBase58()}
-                  </code>
-                  <small>Click to copy</small>
-                </div>
-                {dSig && <TxLink signature={dSig} />}
-              </div>
-            )}
-          </div>
-        </section>
-      )}
-
-      {view === "manage" && (
-        <section className="manage-view">
-          <div className="view-header">
-            <h2>My Vault</h2>
-            <p>Track fill status and withdraw unsold SOL.</p>
-          </div>
-          {!wallet.publicKey && (
-            <div className="connect-prompt">Connect your wallet.</div>
-          )}
-          {wallet.publicKey && !myVaultEntry && (
-            <div className="empty-state">
-              No active vault. Go to <strong>Sell SOL</strong> to create one.
-            </div>
-          )}
-          {myVaultEntry &&
-            (() => {
-              const fillPct =
-                myVaultEntry.totalDeposit > 0n
-                  ? Math.round(
-                      Number(
-                        ((myVaultEntry.totalDeposit -
-                          myVaultEntry.remainingBalance) *
-                          100n) /
-                          myVaultEntry.totalDeposit
-                      )
-                    )
-                  : 0;
-              return (
-                <div className="manage-card">
-                  <div className="manage-row">
-                    <span>Total deposited</span>
-                    <strong>{fmtSol(myVaultEntry.totalDeposit)}</strong>
-                  </div>
-                  <div className="manage-row">
-                    <span>Remaining</span>
-                    <strong>{fmtSol(myVaultEntry.remainingBalance)}</strong>
-                  </div>
-                  <div
-                    className="fill-bar-wrap large"
-                    style={{ marginTop: "1rem" }}
-                  >
-                    <div className="fill-bar">
-                      <div
-                        className="fill-bar-inner"
-                        style={{ width: `${fillPct}%` }}
-                      />
-                    </div>
-                  </div>
-                  <div className="manage-note">
-                    <IconLock /> Your price floor is encrypted on-chain under
-                    the Arcium MXE key. Buyers and validators cannot read it.
-                  </div>
-                  <button
-                    className="action-button withdraw-action"
-                    disabled={
-                      myVaultEntry.remainingBalance === 0n || withdrawing
-                    }
-                    onClick={async () => {
-                      setWithdrawing(true);
-                      try {
-                        await withdraw();
-                      } finally {
-                        setWithdrawing(false);
+              {dStatus === "done" && myVault && (
+                <div className="vault-created">
+                  <strong>
+                    <IconCheck /> Vault created
+                  </strong>
+                  <p>
+                    Visible to buyers in Market. Track fills and withdraw in My
+                    Vault.
+                  </p>
+                  <div className="vault-address-card">
+                    <span>Vault address</span>
+                    <code
+                      onClick={() =>
+                        navigator.clipboard.writeText(myVault.toBase58())
                       }
-                    }}
-                  >
-                    {myVaultEntry.remainingBalance === 0n
-                      ? "Nothing to withdraw"
-                      : withdrawing
-                      ? "Withdrawing..."
-                      : `Withdraw ${fmtSol(
-                          myVaultEntry.remainingBalance
-                        )} to SOL`}
-                  </button>
-                </div>
-              );
-            })()}
-        </section>
-      )}
-
-      {view === "history" && (
-        <section className="manage-view">
-          <div className="view-header">
-            <h2>Purchase History</h2>
-            <p>Orders filled in this browser session.</p>
-          </div>
-          {purchases.length === 0 && (
-            <div className="empty-state">No purchases yet this session.</div>
-          )}
-          {purchases.length > 0 && (
-            <div className="history-list">
-              {purchases.map((p, i) => (
-                <div key={i} className="history-row">
-                  <div className="history-row-top">
-                    <span className="history-vault">
-                      Vault {shortKey(p.vaultKey)}
-                    </span>
-                    <span className="history-time">
-                      {new Date(p.timestamp).toLocaleTimeString()}
-                    </span>
-                  </div>
-                  {p.filledAmount > 0n ? (
-                    <div
-                      className="fill-metrics"
-                      style={{ marginTop: "0.75rem" }}
                     >
-                      <div>
-                        <small>Received</small>
-                        <strong>{fmtSol(p.filledAmount)}</strong>
-                      </div>
-                      <div>
-                        <small>Paid</small>
-                        <strong>{fmtCost(p.cost)}</strong>
-                      </div>
-                      <div>
-                        <small>Price</small>
-                        <strong>
-                          {fmtEffectivePrice(p.cost, p.filledAmount)}
-                        </strong>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="no-fill-note">No fill. Price did not cross.</p>
-                  )}
-                  <TxLink signature={p.txSig} />
+                      {myVault.toBase58()}
+                    </code>
+                    <small>Click to copy</small>
+                  </div>
+                  {dSig && <TxLink signature={dSig} />}
                 </div>
-              ))}
+              )}
             </div>
-          )}
-        </section>
-      )}
+          </section>
+        )}
+
+        {view === "manage" && (
+          <section className="manage-view">
+            <div className="section-header">
+              <div>
+                <h2>My Vault</h2>
+                <p>Track fill status and withdraw unsold SOL.</p>
+              </div>
+            </div>
+            {!wallet.publicKey && (
+              <div className="empty-state">
+                <IconVaultEmpty />
+                <strong>Connect wallet</strong>
+                <span>Your seller vault appears here.</span>
+              </div>
+            )}
+            {wallet.publicKey && !myVaultEntry && (
+              <div className="empty-state">
+                <IconVaultEmpty />
+                <strong>No active vault</strong>
+                <button className="empty-link" onClick={() => setView("sell")}>
+                  <span>Create a vault in Sell SOL</span>
+                  <IconArrow />
+                </button>
+              </div>
+            )}
+            {myVaultEntry &&
+              (() => {
+                const fillPct =
+                  myVaultEntry.totalDeposit > 0n
+                    ? Math.round(
+                        Number(
+                          ((myVaultEntry.totalDeposit -
+                            myVaultEntry.remainingBalance) *
+                            100n) /
+                            myVaultEntry.totalDeposit
+                        )
+                      )
+                    : 0;
+                return (
+                  <div className="manage-card">
+                    <div className="manage-row">
+                      <span>Total deposited</span>
+                      <strong>{fmtSol(myVaultEntry.totalDeposit)}</strong>
+                    </div>
+                    <div className="manage-row">
+                      <span>Remaining</span>
+                      <strong>{fmtSol(myVaultEntry.remainingBalance)}</strong>
+                    </div>
+                    <div
+                      className="vault-fill manage-fill"
+                      style={
+                        { "--fill-pct": `${fillPct}%` } as React.CSSProperties
+                      }
+                    >
+                      <span />
+                    </div>
+                    <div className="panel-note">
+                      <IconLock /> Your price floor is encrypted under the Arcium
+                      MXE key.
+                    </div>
+                    <button
+                      className="action-button withdraw-action"
+                      disabled={
+                        myVaultEntry.remainingBalance === 0n || withdrawing
+                      }
+                      onClick={async () => {
+                        setWithdrawing(true);
+                        try {
+                          await withdraw();
+                        } finally {
+                          setWithdrawing(false);
+                        }
+                      }}
+                    >
+                      {myVaultEntry.remainingBalance === 0n
+                        ? "Nothing to Withdraw"
+                        : withdrawing
+                        ? "Withdrawing"
+                        : `Withdraw ${fmtSol(myVaultEntry.remainingBalance)}`}
+                    </button>
+                  </div>
+                );
+              })()}
+          </section>
+        )}
+
+        {view === "history" && (
+          <section className="history-view">
+            <div className="section-header">
+              <div>
+                <h2>Purchase History</h2>
+                <p>Orders filled in this browser session.</p>
+              </div>
+            </div>
+            {purchases.length === 0 && (
+              <div className="empty-state">
+                <IconVaultEmpty />
+                <strong>No purchases yet</strong>
+                <span>Filled orders will appear here.</span>
+              </div>
+            )}
+            {purchases.length > 0 && (
+              <div className="history-list">
+                {purchases.map((p, i) => (
+                  <div key={i} className="history-row">
+                    <div className="history-row-top">
+                      <span className="history-vault">
+                        Vault {shortKey(p.vaultKey)}
+                      </span>
+                      <span className="history-time">
+                        {new Date(p.timestamp).toLocaleTimeString()}
+                      </span>
+                    </div>
+                    {p.filledAmount > 0n ? (
+                      <div className="fill-metrics history-metrics">
+                        <div>
+                          <small>Received</small>
+                          <strong>{fmtSol(p.filledAmount)}</strong>
+                        </div>
+                        <div>
+                          <small>Paid</small>
+                          <strong>{fmtCost(p.cost)}</strong>
+                        </div>
+                        <div>
+                          <small>Price</small>
+                          <strong>
+                            {fmtEffectivePrice(p.cost, p.filledAmount)}
+                          </strong>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="no-fill-note">No fill. Price did not cross.</p>
+                    )}
+                    <TxLink signature={p.txSig} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+      </div>
+
+      <footer className="app-footer">
+        <span>ArcSlicer · Built on Arcium · Solana Devnet</span>
+        <div>
+          <a href="https://docs.arcium.com/" target="_blank" rel="noreferrer">
+            Docs
+          </a>
+          <a
+            href="https://github.com/altraa92/arcslicer_2"
+            target="_blank"
+            rel="noreferrer"
+          >
+            GitHub
+          </a>
+          <a href="https://discord.com/" target="_blank" rel="noreferrer">
+            Discord
+          </a>
+        </div>
+      </footer>
     </main>
   );
 }
