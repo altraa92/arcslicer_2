@@ -9,6 +9,7 @@ import {
   getAssociatedTokenAddressSync,
   createAssociatedTokenAccountInstruction,
   createSyncNativeInstruction,
+  createCloseAccountInstruction,
 } from "@solana/spl-token";
 import {
   awaitComputationFinalization,
@@ -52,7 +53,6 @@ export function useDepositVault(
         if (!cipher.ready) await cipher.init();
         setStatus("encrypting");
 
-        const enc   = cipher.encryptU64Pair(params.depositLamports, params.pricePerToken);
         const owner = provider.wallet.publicKey;
 
         const wsolAta = getAssociatedTokenAddressSync(WSOL_MINT, owner);
@@ -65,6 +65,42 @@ export function useDepositVault(
         const [vaultTokenAccount] = PublicKey.findProgramAddressSync(
           [Buffer.from("vault"), owner.toBuffer(), WSOL_MINT.toBuffer()],
           program.programId
+        );
+
+        const existingVault = await provider.connection.getAccountInfo(
+          slicerParent
+        );
+        if (existingVault) {
+          const existingParent = await (program.account as any).slicerParent.fetch(
+            slicerParent
+          );
+          const remainingBalance = BigInt(
+            existingParent.remainingBalance.toString()
+          );
+
+          if (!existingParent.isWithdrawn && remainingBalance > 0n) {
+            throw new Error(
+              `This seller wallet already has an active vault with ${(
+                Number(remainingBalance) / 1e9
+              ).toFixed(4)} SOL remaining. Withdraw it from My Vault before creating a new one.`
+            );
+          }
+
+          setStatus("sending");
+          await program.methods
+            .closeVault()
+            .accountsPartial({
+              owner,
+              slicerParent,
+              vaultTokenAccount,
+            })
+            .rpc({ commitment: "confirmed" });
+          setStatus("encrypting");
+        }
+
+        const enc = cipher.encryptU64Pair(
+          params.depositLamports,
+          params.pricePerToken
         );
 
         const computationOffset = new anchor.BN(
@@ -137,5 +173,47 @@ export function useDepositVault(
     return pda;
   }, [program, provider]);
 
-  return { deposit, status, txSig, error, getParentPda };
+  const withdraw = useCallback(async () => {
+    if (!program || !provider) return;
+    const owner = provider.wallet.publicKey;
+    const wsolAta = getAssociatedTokenAddressSync(WSOL_MINT, owner);
+
+    // Derive vault PDA internally — no args needed from the component
+    const [slicerParent] = PublicKey.findProgramAddressSync(
+      [Buffer.from("slicer_parent"), owner.toBuffer(), WSOL_MINT.toBuffer()],
+      program.programId
+    );
+    const [vaultTokenAccount] = PublicKey.findProgramAddressSync(
+      [Buffer.from("vault"), owner.toBuffer(), WSOL_MINT.toBuffer()],
+      program.programId
+    );
+
+    try {
+      // 1. withdraw_remainder — moves wSOL from vault PDA → seller wSOL ATA
+      await program.methods
+        .withdrawRemainder()
+        .accountsPartial({
+          owner,
+          slicerParent,
+          vaultTokenAccount,
+          ownerTokenAccount: wsolAta,
+        })
+        .rpc({ commitment: "confirmed" });
+
+      // 2. closeAccount — unwraps wSOL ATA → native SOL in wallet
+      const closeTx = new anchor.web3.Transaction().add(
+        createCloseAccountInstruction(wsolAta, owner, owner)
+      );
+      const { blockhash } = await provider.connection.getLatestBlockhash();
+      closeTx.recentBlockhash = blockhash;
+      closeTx.feePayer = owner;
+      const signed = await provider.wallet.signTransaction(closeTx);
+      await provider.connection.sendRawTransaction(signed.serialize(), { skipPreflight: false });
+    } catch (e: any) {
+      console.error("Withdraw failed:", e?.message);
+      throw e;
+    }
+  }, [program, provider]);
+
+  return { deposit, withdraw, status, txSig, error, getParentPda };
 }

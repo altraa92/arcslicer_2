@@ -4,27 +4,24 @@ use anchor_lang::prelude::*;
 
 #[account]
 pub struct SlicerParent {
-    pub owner: Pubkey,           // The Whale who deposits funds
-    pub mint: Pubkey,            // The token being sold
-    pub target_mint: Pubkey,     // The token wanted in return
-    pub vault_pda: Pubkey,       // The escrow token account
-    pub total_deposit: u64,      // Original amount deposited
-    pub remaining_balance: u64,  // Public mirror — synced on reveal
-    pub urgency_level: u8,       // 1 Stealth | 2 Standard | 3 Aggressive
-    pub last_slice_time: i64,    // Timestamp of last engine trigger
-    pub bump: u8,                // PDA bump for this account
-    pub vault_bump: u8,          // PDA bump for the token vault
-
-    // Arcium MXE-encrypted vault state (only the MPC cluster can read these)
-    pub encrypted_balance: [u8; 32], // Enc<Mxe, remaining_balance>
-    pub encrypted_price:   [u8; 32], // Enc<Mxe, price_per_token>
-    pub vault_nonce: u128,           // Nonce from last Arcium computation
-
+    pub owner: Pubkey,
+    pub mint: Pubkey,
+    pub target_mint: Pubkey,
+    pub vault_pda: Pubkey,
+    pub total_deposit: u64,
+    pub remaining_balance: u64,
+    pub urgency_level: u8,
+    pub last_slice_time: i64,
+    pub bump: u8,
+    pub vault_bump: u8,
+    pub encrypted_balance: [u8; 32],
+    pub encrypted_price: [u8; 32],
+    pub vault_nonce: u128,
     pub is_withdrawn: bool,
 }
 
 impl SlicerParent {
-    pub const LEN: usize = 8   // discriminator
+    pub const LEN: usize = 8
         + 32  // owner
         + 32  // mint
         + 32  // target_mint
@@ -38,19 +35,37 @@ impl SlicerParent {
         + 32  // encrypted_balance
         + 32  // encrypted_price
         + 16  // vault_nonce
-        + 1;  // is_withdrawn
+        + 1; // is_withdrawn
 }
 
 #[account]
 pub struct ChildSlice {
-    pub parent: Pubkey,        // Links back to SlicerParent
-    pub buyer: Pubkey,         // The buyer who submitted the order
-    pub amount_available: u64, // Filled by MPC callback
-    pub price_per_token: u64,  // Filled by MPC callback
-    pub is_filled: bool,       // True once callback runs
+    pub parent: Pubkey,
+    pub buyer: Pubkey,
+    pub amount_available: u64,
+    pub price_per_token: u64,
+    pub is_filled: bool,
     pub bump: u8,
+    /// Plaintext fill amount in lamports, verified and stored by the MPC callback.
+    pub filled_lamports: u64,
+    /// Plaintext USDC cost in micro-units, verified and stored by the MPC callback.
+    pub cost_usdc: u64,
+    /// True once finalize_fill has acknowledged the callback result.
+    pub is_finalized: bool,
+    /// True once settle has been called and tokens have been exchanged
+    pub is_settled: bool,
 }
 
 impl ChildSlice {
-    pub const LEN: usize = 8 + 32 + 32 + 8 + 8 + 1 + 1;
+    pub const LEN: usize = 8
+        + 32  // parent
+        + 32  // buyer
+        + 8   // amount_available
+        + 8   // price_per_token
+        + 1   // is_filled
+        + 1   // bump
+        + 8   // filled_lamports
+        + 8   // cost_usdc
+        + 1   // is_finalized
+        + 1; // is_settled
 }

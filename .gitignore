@@ -12,3 +12,7 @@ encrypted-ixs/src/main.rs
 artifacts/
 env
 .env
+.env.*
+!.env.example
+.codex/
+.agents/

@@ -8,6 +8,91 @@
   },
   "instructions": [
     {
+      "name": "close_vault",
+      "discriminator": [
+        141,
+        103,
+        17,
+        126,
+        72,
+        75,
+        29,
+        29
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "slicer_parent"
+          ]
+        },
+        {
+          "name": "slicer_parent",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  108,
+                  105,
+                  99,
+                  101,
+                  114,
+                  95,
+                  112,
+                  97,
+                  114,
+                  101,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "account",
+                "path": "slicer_parent.mint",
+                "account": "SlicerParent"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_token_account",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "account",
+                "path": "slicer_parent.mint",
+                "account": "SlicerParent"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "deposit_and_init_vault",
       "discriminator": [
         222,
@@ -219,6 +304,38 @@
       ]
     },
     {
+      "name": "finalize_fill",
+      "discriminator": [
+        166,
+        128,
+        11,
+        28,
+        138,
+        115,
+        194,
+        22
+      ],
+      "accounts": [
+        {
+          "name": "buyer",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "child_slice"
+          ]
+        },
+        {
+          "name": "child_slice",
+          "writable": true
+        },
+        {
+          "name": "slicer_parent",
+          "writable": true
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "init_match_slice_comp_def",
       "discriminator": [
         73,
@@ -413,16 +530,16 @@
       "args": []
     },
     {
-      "name": "match_slice_callback",
+      "name": "match_slice_v2_callback",
       "discriminator": [
-        154,
-        7,
-        229,
-        225,
-        243,
-        131,
-        11,
-        95
+        147,
+        136,
+        83,
+        86,
+        96,
+        152,
+        44,
+        59
       ],
       "accounts": [
         {
@@ -465,7 +582,7 @@
                   "kind": "type",
                   "type": {
                     "defined": {
-                      "name": "MatchSliceOutput"
+                      "name": "MatchSliceV2Output"
                     }
                   }
                 }
@@ -675,6 +792,97 @@
           "type": "u128"
         }
       ]
+    },
+    {
+      "name": "settle",
+      "discriminator": [
+        175,
+        42,
+        185,
+        87,
+        144,
+        131,
+        102,
+        212
+      ],
+      "accounts": [
+        {
+          "name": "buyer",
+          "docs": [
+            "Buyer signs and pays USDC"
+          ],
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "child_slice"
+          ]
+        },
+        {
+          "name": "child_slice",
+          "writable": true
+        },
+        {
+          "name": "slicer_parent",
+          "writable": true
+        },
+        {
+          "name": "vault_token_account",
+          "docs": [
+            "Vault PDA holding the seller's wSOL — authority is the vault itself"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "slicer_parent.owner",
+                "account": "SlicerParent"
+              },
+              {
+                "kind": "account",
+                "path": "slicer_parent.mint",
+                "account": "SlicerParent"
+              }
+            ]
+          }
+        },
+        {
+          "name": "buyer_wsol_ata",
+          "docs": [
+            "Buyer's wSOL ATA — receives the filled SOL"
+          ],
+          "writable": true
+        },
+        {
+          "name": "buyer_usdc_ata",
+          "docs": [
+            "Buyer's USDC ATA — pays the seller"
+          ],
+          "writable": true
+        },
+        {
+          "name": "seller_usdc_ata",
+          "docs": [
+            "Seller's USDC ATA — receives payment"
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": []
     },
     {
       "name": "withdraw_remainder",
@@ -892,6 +1100,19 @@
       ]
     },
     {
+      "name": "FillFinalized",
+      "discriminator": [
+        16,
+        182,
+        117,
+        230,
+        203,
+        44,
+        123,
+        165
+      ]
+    },
+    {
       "name": "MatchResultEvent",
       "discriminator": [
         184,
@@ -902,6 +1123,19 @@
         163,
         30,
         173
+      ]
+    },
+    {
+      "name": "Settled",
+      "discriminator": [
+        232,
+        210,
+        40,
+        17,
+        142,
+        124,
+        145,
+        238
       ]
     },
     {
@@ -951,6 +1185,46 @@
       "code": 6003,
       "name": "AlreadyWithdrawn",
       "msg": "Already withdrawn"
+    },
+    {
+      "code": 6004,
+      "name": "NotYetFilled",
+      "msg": "MPC callback has not fired yet"
+    },
+    {
+      "code": 6005,
+      "name": "AlreadyFinalized",
+      "msg": "Fill already finalized"
+    },
+    {
+      "code": 6006,
+      "name": "FillExceedsBalance",
+      "msg": "Fill amount exceeds vault remaining balance"
+    },
+    {
+      "code": 6007,
+      "name": "NotFinalized",
+      "msg": "Fill not yet finalized — call finalize_fill first"
+    },
+    {
+      "code": 6008,
+      "name": "AlreadySettled",
+      "msg": "Already settled"
+    },
+    {
+      "code": 6009,
+      "name": "NothingToSettle",
+      "msg": "Nothing to settle — fill amount is zero"
+    },
+    {
+      "code": 6010,
+      "name": "VaultStillActive",
+      "msg": "Vault still has an active remaining balance"
+    },
+    {
+      "code": 6011,
+      "name": "VaultStillFunded",
+      "msg": "Vault token account still holds funds"
     }
   ],
   "types": [
@@ -1052,6 +1326,34 @@
           {
             "name": "bump",
             "type": "u8"
+          },
+          {
+            "name": "filled_lamports",
+            "docs": [
+              "Plaintext fill amount in lamports, verified and stored by the MPC callback."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "cost_usdc",
+            "docs": [
+              "Plaintext USDC cost in micro-units, verified and stored by the MPC callback."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "is_finalized",
+            "docs": [
+              "True once finalize_fill has acknowledged the callback result."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "is_settled",
+            "docs": [
+              "True once settle has been called and tokens have been exchanged"
+            ],
+            "type": "bool"
           }
         ]
       }
@@ -1352,6 +1654,34 @@
       }
     },
     {
+      "name": "FillFinalized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "parent",
+            "type": "pubkey"
+          },
+          {
+            "name": "child",
+            "type": "pubkey"
+          },
+          {
+            "name": "filled_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "cost_usdc",
+            "type": "u64"
+          },
+          {
+            "name": "remaining_balance",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
       "name": "InitVaultBalanceOutput",
       "docs": [
         "The output of the callback instruction. Provided as a struct with ordered fields",
@@ -1557,7 +1887,7 @@
       }
     },
     {
-      "name": "MatchSliceOutput",
+      "name": "MatchSliceV2Output",
       "docs": [
         "The output of the callback instruction. Provided as a struct with ordered fields",
         "as anchor does not support tuples and tuple structs yet."
@@ -1569,7 +1899,7 @@
             "name": "field_0",
             "type": {
               "defined": {
-                "name": "MatchSliceOutputStruct0"
+                "name": "MatchSliceV2OutputStruct0"
               }
             }
           }
@@ -1577,12 +1907,20 @@
       }
     },
     {
-      "name": "MatchSliceOutputStruct0",
+      "name": "MatchSliceV2OutputStruct0",
       "type": {
         "kind": "struct",
         "fields": [
           {
             "name": "field_0",
+            "type": "u64"
+          },
+          {
+            "name": "field_1",
+            "type": "u64"
+          },
+          {
+            "name": "field_2",
             "type": {
               "defined": {
                 "name": "SharedEncryptedStruct",
@@ -1596,7 +1934,7 @@
             }
           },
           {
-            "name": "field_1",
+            "name": "field_3",
             "type": {
               "defined": {
                 "name": "MXEEncryptedStruct",
@@ -1880,6 +2218,38 @@
                 "vec": "bool"
               }
             ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "Settled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "parent",
+            "type": "pubkey"
+          },
+          {
+            "name": "child",
+            "type": "pubkey"
+          },
+          {
+            "name": "buyer",
+            "type": "pubkey"
+          },
+          {
+            "name": "seller",
+            "type": "pubkey"
+          },
+          {
+            "name": "filled_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "cost_usdc",
+            "type": "u64"
           }
         ]
       }
