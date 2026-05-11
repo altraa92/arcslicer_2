@@ -426,22 +426,28 @@ export default function DarkPool() {
     "finalizing",
     "settling",
   ].includes(bStatus);
+  const openLiquidity = vaults.reduce(
+    (sum, vault) => sum + vault.remainingBalance,
+    0n
+  );
+  const filledLiquidity = vaults.reduce(
+    (sum, vault) => sum + vault.filledAmount,
+    0n
+  );
+  const filledOrders = purchases.filter((p) => p.filledAmount > 0n).length;
+  const walletState = wallet.publicKey ? shortKey(wallet.publicKey) : "Offline";
 
   return (
     <main className="darkpool-shell">
-      <div className="market-grid" aria-hidden="true" />
-      <div className="orb orb-a" aria-hidden="true" />
-      <div className="orb orb-b" aria-hidden="true" />
-
       <header className="command-header">
         <div className="brand-lockup">
-          <span className="eyebrow">Arcium MPC · Solana Devnet</span>
+          <span className="eyebrow">Arcium MPC / Solana Devnet</span>
           <h1>
             Arc<span>Slicer</span>
           </h1>
           <p>
-            Private SOL/USDC dark pool. Prices never leave your browser
-            unencrypted.
+            Private SOL/USDC liquidity. Price limits stay encrypted while fills
+            settle on Solana.
           </p>
         </div>
         <div className="header-console">
@@ -450,6 +456,29 @@ export default function DarkPool() {
           </div>
         </div>
       </header>
+
+      <section className="desk-stats" aria-label="Market status">
+        <div className="desk-stat">
+          <span>Live vaults</span>
+          <strong>{vaults.length}</strong>
+        </div>
+        <div className="desk-stat">
+          <span>Open SOL</span>
+          <strong>{fmtSol(openLiquidity)}</strong>
+        </div>
+        <div className="desk-stat">
+          <span>Filled SOL</span>
+          <strong>{fmtSol(filledLiquidity)}</strong>
+        </div>
+        <div className="desk-stat">
+          <span>Session fills</span>
+          <strong>{filledOrders}</strong>
+        </div>
+        <div className="desk-stat">
+          <span>Wallet</span>
+          <strong>{walletState}</strong>
+        </div>
+      </section>
 
       <nav className="pool-nav">
         {(
@@ -479,7 +508,7 @@ export default function DarkPool() {
           title="2 SOL airdrop + 1000 USDC"
         >
           <IconFaucet />
-          <span>{isDropping ? "Funding..." : "Get Devnet Funds"}</span>
+          <span>{isDropping ? "Funding..." : "Devnet Funds"}</span>
         </button>
         {faucetLog && <span className="faucet-log">{faucetLog}</span>}
         <div
@@ -494,18 +523,18 @@ export default function DarkPool() {
           >
             {shortKey(USDC_MINT)}
           </code>
-          <span className="token-pill-hint">copy &amp; add to Phantom</span>
+          <span className="token-pill-hint">copy mint</span>
         </div>
       </nav>
 
       {view === "market" && (
-        <section className="market-view">
+        <section className={`market-view ${selectedVault ? "has-selection" : ""}`}>
           <div className="market-header">
             <div>
               <h2>Active Vaults</h2>
               <p className="market-sub">
-                Each vault holds a seller's SOL. Submit your max USDC price and
-                the private match checks whether the prices cross.
+                Seller vaults are public, price floors stay private. Choose a
+                vault and submit your max USDC price.
               </p>
             </div>
             <button
@@ -646,6 +675,7 @@ export default function DarkPool() {
                 <button
                   className="close-btn"
                   onClick={() => setSelectedVault(null)}
+                  aria-label="Close buy panel"
                 >
                   <IconClose />
                 </button>
@@ -653,8 +683,7 @@ export default function DarkPool() {
               <div className="how-it-works">
                 <IconLock />
                 <span>
-                  Your max price and the seller's floor are encrypted before the
-                  match is checked.
+                  Encrypted price check through Arcium before settlement.
                 </span>
               </div>
               <div className="available-info">
@@ -751,8 +780,8 @@ export default function DarkPool() {
           <div className="view-header">
             <h2>Create a private vault</h2>
             <p>
-              Deposit SOL and set a hidden floor price. Buyers see your vault
-              size, never your price.
+              Deposit SOL and set a hidden floor. Buyers see size and fill
+              status, not your price.
             </p>
           </div>
           <div className="explainer-steps">
@@ -951,7 +980,7 @@ export default function DarkPool() {
         <section className="manage-view">
           <div className="view-header">
             <h2>Purchase History</h2>
-            <p>Orders filled this session. History resets on page refresh.</p>
+            <p>Orders filled in this browser session.</p>
           </div>
           {purchases.length === 0 && (
             <div className="empty-state">No purchases yet this session.</div>
