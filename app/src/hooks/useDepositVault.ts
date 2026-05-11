@@ -1,7 +1,3 @@
-/**
- * useDepositVault.ts
- */
-
 import { useState, useCallback } from "react";
 import * as anchor from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
@@ -23,8 +19,24 @@ import {
 import { type ArciumCipher } from "./useArciumCipher";
 import { WSOL_MINT, USDC_MINT, randomBytes, compDefOffset } from "../config/constants";
 
-// Devnet cluster offset — matches arcium deploy --cluster-offset 456
 const CLUSTER_OFFSET = 456;
+
+const friendlyDepositError = (e: any) => {
+  const message = e?.message ?? String(e ?? "");
+  if (/user rejected|rejected/i.test(message)) {
+    return "Transaction cancelled.";
+  }
+  if (/insufficient lamports|0x1/i.test(message)) {
+    return "This wallet needs more devnet SOL for the deposit and fees.";
+  }
+  if (/already in use/i.test(message)) {
+    return "This wallet already has a vault. Withdraw the current vault before creating another one.";
+  }
+  if (/blockhash|timeout|timed out/i.test(message)) {
+    return "The network took too long to respond. Please try again.";
+  }
+  return message || "Deposit failed. Please try again.";
+};
 
 export type DepositStatus =
   | "idle" | "encrypting" | "sending" | "waiting" | "done" | "error";
@@ -82,7 +94,7 @@ export function useDepositVault(
             throw new Error(
               `This seller wallet already has an active vault with ${(
                 Number(remainingBalance) / 1e9
-              ).toFixed(4)} SOL remaining. Withdraw it from My Vault before creating a new one.`
+              ).toFixed(4)} SOL remaining. Withdraw it before creating a new one.`
             );
           }
 
@@ -109,7 +121,6 @@ export function useDepositVault(
 
         setStatus("sending");
 
-        // Wrap SOL → wSOL
         const setupTx   = new Transaction();
         const wsolAtaInfo = await provider.connection.getAccountInfo(wsolAta);
         if (!wsolAtaInfo) {
@@ -157,7 +168,7 @@ export function useDepositVault(
         await awaitComputationFinalization(provider, computationOffset, program.programId, "confirmed");
         setStatus("done");
       } catch (e: any) {
-        setError(e?.message ?? "Unknown error");
+        setError(friendlyDepositError(e));
         setStatus("error");
       }
     },
@@ -178,7 +189,6 @@ export function useDepositVault(
     const owner = provider.wallet.publicKey;
     const wsolAta = getAssociatedTokenAddressSync(WSOL_MINT, owner);
 
-    // Derive vault PDA internally — no args needed from the component
     const [slicerParent] = PublicKey.findProgramAddressSync(
       [Buffer.from("slicer_parent"), owner.toBuffer(), WSOL_MINT.toBuffer()],
       program.programId
@@ -189,7 +199,6 @@ export function useDepositVault(
     );
 
     try {
-      // 1. withdraw_remainder — moves wSOL from vault PDA → seller wSOL ATA
       await program.methods
         .withdrawRemainder()
         .accountsPartial({
@@ -200,7 +209,6 @@ export function useDepositVault(
         })
         .rpc({ commitment: "confirmed" });
 
-      // 2. closeAccount — unwraps wSOL ATA → native SOL in wallet
       const closeTx = new anchor.web3.Transaction().add(
         createCloseAccountInstruction(wsolAta, owner, owner)
       );

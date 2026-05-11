@@ -10,8 +10,6 @@ import { useFaucet } from "../hooks/useFaucet";
 import { PROGRAM_ID, USDC_MINT } from "../config/constants";
 import idl from "../idl/arcslicer_2.json";
 
-// ── Types ─────────────────────────────────────────────────────────
-
 interface VaultEntry {
   pubkey: PublicKey;
   owner: PublicKey;
@@ -30,8 +28,6 @@ interface PurchaseRecord {
   timestamp: number;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────
-
 const fmtSol = (n: bigint) =>
   (Number(n) / 1e9).toLocaleString(undefined, { maximumFractionDigits: 4 }) +
   " SOL";
@@ -41,7 +37,7 @@ const fmtCost = (raw: bigint) =>
   (Number(raw) / 1e6).toLocaleString(undefined, { maximumFractionDigits: 4 });
 
 const fmtEffectivePrice = (cost: bigint, filled: bigint): string => {
-  if (filled === 0n) return "—";
+  if (filled === 0n) return "-";
   const price = Number(cost) / 1e6 / (Number(filled) / 1e9);
   return (
     "$" +
@@ -52,12 +48,10 @@ const fmtEffectivePrice = (cost: bigint, filled: bigint): string => {
 
 const shortKey = (k: PublicKey | string) => {
   const s = typeof k === "string" ? k : k.toBase58();
-  return s.slice(0, 5) + "…" + s.slice(-4);
+  return s.slice(0, 5) + "..." + s.slice(-4);
 };
 
 type View = "market" | "sell" | "manage" | "history";
-
-// ── SVG Icons ─────────────────────────────────────────────────────
 
 const IconMarket = () => (
   <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -211,12 +205,9 @@ const IconArrow = () => (
   </svg>
 );
 
-// ── Account sizes — must match state.rs exactly ───────────────────
 const SLICER_PARENT_LEN =
   8 + 32 + 32 + 32 + 32 + 8 + 8 + 1 + 8 + 1 + 1 + 32 + 32 + 16 + 1; // 244
 const CHILD_SLICE_LEN = 8 + 32 + 32 + 8 + 8 + 1 + 1 + 8 + 8 + 1 + 1; // 108
-
-// ── Component ─────────────────────────────────────────────────────
 
 export default function DarkPool() {
   const { connection } = useConnection();
@@ -276,9 +267,6 @@ export default function DarkPool() {
     faucetLog,
   } = useFaucet();
 
-  // ── fetchVaults ───────────────────────────────────────────────
-  // Uses getProgramAccounts with dataSize filter to skip stale
-  // accounts from old deploys — avoids the RangeError decode crash.
   const fetchVaults = useCallback(async () => {
     if (!program) return;
     setLoadingVaults(true);
@@ -382,7 +370,6 @@ export default function DarkPool() {
     }
   }, [bStatus]);
 
-  // ── Handlers ──────────────────────────────────────────────────
   const handleDeposit = () => {
     if (!provider || !depositSol || !priceUsdc) return;
     deposit({
@@ -440,14 +427,12 @@ export default function DarkPool() {
     "settling",
   ].includes(bStatus);
 
-  // ── Render ────────────────────────────────────────────────────
   return (
     <main className="darkpool-shell">
       <div className="market-grid" aria-hidden="true" />
       <div className="orb orb-a" aria-hidden="true" />
       <div className="orb orb-b" aria-hidden="true" />
 
-      {/* Header */}
       <header className="command-header">
         <div className="brand-lockup">
           <span className="eyebrow">Arcium MPC · Solana Devnet</span>
@@ -466,7 +451,6 @@ export default function DarkPool() {
         </div>
       </header>
 
-      {/* Nav */}
       <nav className="pool-nav">
         {(
           [
@@ -495,7 +479,7 @@ export default function DarkPool() {
           title="2 SOL airdrop + 1000 USDC"
         >
           <IconFaucet />
-          <span>{isDropping ? "Funding…" : "Get Devnet Funds"}</span>
+          <span>{isDropping ? "Funding..." : "Get Devnet Funds"}</span>
         </button>
         {faucetLog && <span className="faucet-log">{faucetLog}</span>}
         <div
@@ -514,16 +498,14 @@ export default function DarkPool() {
         </div>
       </nav>
 
-      {/* ══ MARKET ══ */}
       {view === "market" && (
         <section className="market-view">
           <div className="market-header">
             <div>
               <h2>Active Vaults</h2>
               <p className="market-sub">
-                Each vault holds a seller's SOL. Submit your max USDC price —
-                the MPC cluster checks privately if prices cross. Zero exposure,
-                zero leakage.
+                Each vault holds a seller's SOL. Submit your max USDC price and
+                the private match checks whether the prices cross.
               </p>
             </div>
             <button
@@ -563,7 +545,7 @@ export default function DarkPool() {
                     strokeLinejoin="round"
                   />
                 </svg>
-                {loadingVaults ? "Loading…" : "Refresh"}
+                {loadingVaults ? "Loading..." : "Refresh"}
               </span>
             </button>
           </div>
@@ -657,7 +639,6 @@ export default function DarkPool() {
             })}
           </div>
 
-          {/* Buy panel */}
           {selectedVault && (
             <div className="buy-panel">
               <div className="buy-panel-header">
@@ -672,9 +653,8 @@ export default function DarkPool() {
               <div className="how-it-works">
                 <IconLock />
                 <span>
-                  Your max price and the seller's floor are both encrypted. The
-                  MPC cluster checks privately if they cross — neither party
-                  sees the other's number.
+                  Your max price and the seller's floor are encrypted before the
+                  match is checked.
                 </span>
               </div>
               <div className="available-info">
@@ -717,7 +697,7 @@ export default function DarkPool() {
                   !wallet.publicKey || !buyAmtSol || !maxPriceUsdc || buyBusy
                 }
               >
-                {buyBusy ? "Processing…" : "Encrypt & submit order"}
+                {buyBusy ? "Processing..." : "Encrypt & submit order"}
               </button>
               {bStatus !== "idle" && (
                 <StepTracker status={bStatus} error={bErr} />
@@ -734,7 +714,7 @@ export default function DarkPool() {
                         <IconCheck /> Order filled
                       </>
                     ) : (
-                      <>No fill — your max price was below the seller's floor</>
+                      <>No fill. Your max price was below the seller's floor.</>
                     )}
                   </div>
                   {fillResult.filledAmount > 0n && (
@@ -766,7 +746,6 @@ export default function DarkPool() {
         </section>
       )}
 
-      {/* ══ SELL ══ */}
       {view === "sell" && (
         <section className="sell-view">
           <div className="view-header">
@@ -786,12 +765,12 @@ export default function DarkPool() {
               {
                 n: "2",
                 title: "Buyers see your vault size, not your price",
-                body: "They submit their own max price — also encrypted.",
+                body: "They submit their own encrypted max price.",
               },
               {
                 n: "3",
-                title: "MPC cluster matches privately",
-                body: "If buyer max ≥ your floor → fill. Neither side sees the other's number.",
+                title: "The match runs privately",
+                body: "If the buyer's max price meets your floor, the order fills.",
               },
               {
                 n: "4",
@@ -843,9 +822,9 @@ export default function DarkPool() {
                     setUrgency(Number(e.target.value) as 1 | 2 | 3)
                   }
                 >
-                  <option value={1}>Stealth — slower, quieter</option>
-                  <option value={2}>Standard — balanced</option>
-                  <option value={3}>Aggressive — fastest fill</option>
+                  <option value={1}>Stealth: slower, quieter</option>
+                  <option value={2}>Standard: balanced</option>
+                  <option value={3}>Aggressive: fastest fill</option>
                 </select>
               </label>
             </div>
@@ -856,7 +835,7 @@ export default function DarkPool() {
                 !wallet.publicKey || !depositSol || !priceUsdc || depositBusy
               }
             >
-              {depositBusy ? "Processing…" : "Encrypt & deposit SOL"}
+              {depositBusy ? "Processing..." : "Encrypt & deposit SOL"}
             </button>
             {dStatus !== "idle" && (
               <StepTracker status={dStatus} error={dErr} />
@@ -888,7 +867,6 @@ export default function DarkPool() {
         </section>
       )}
 
-      {/* ══ MANAGE ══ */}
       {view === "manage" && (
         <section className="manage-view">
           <div className="view-header">
@@ -939,8 +917,7 @@ export default function DarkPool() {
                   </div>
                   <div className="manage-note">
                     <IconLock /> Your price floor is encrypted on-chain under
-                    the Arcium MXE key. Nobody can read it — not buyers, not
-                    validators, not even Arcium nodes.
+                    the Arcium MXE key. Buyers and validators cannot read it.
                   </div>
                   <button
                     className="action-button withdraw-action"
@@ -959,10 +936,10 @@ export default function DarkPool() {
                     {myVaultEntry.remainingBalance === 0n
                       ? "Nothing to withdraw"
                       : withdrawing
-                      ? "Withdrawing…"
+                      ? "Withdrawing..."
                       : `Withdraw ${fmtSol(
                           myVaultEntry.remainingBalance
-                        )} → SOL`}
+                        )} to SOL`}
                   </button>
                 </div>
               );
@@ -970,7 +947,6 @@ export default function DarkPool() {
         </section>
       )}
 
-      {/* ══ HISTORY ══ */}
       {view === "history" && (
         <section className="manage-view">
           <div className="view-header">
@@ -1013,7 +989,7 @@ export default function DarkPool() {
                       </div>
                     </div>
                   ) : (
-                    <p className="no-fill-note">No fill — price didn't cross</p>
+                    <p className="no-fill-note">No fill. Price did not cross.</p>
                   )}
                   <TxLink signature={p.txSig} />
                 </div>
@@ -1026,8 +1002,6 @@ export default function DarkPool() {
   );
 }
 
-// ── Sub-components ────────────────────────────────────────────────
-
 function StepTracker({
   status,
   error,
@@ -1038,7 +1012,7 @@ function StepTracker({
   const steps = [
     { key: "encrypting", label: "Encrypt locally" },
     { key: "sending", label: "Send to Solana" },
-    { key: "waiting", label: "MPC computing" },
+    { key: "waiting", label: "Checking match" },
     { key: "finalizing", label: "Finalizing fill" },
     { key: "settling", label: "Settling tokens" },
     { key: "done", label: "Complete" },

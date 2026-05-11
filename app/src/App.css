@@ -683,7 +683,6 @@ button {
 
 
 
-/* ── Nav ─────────────────────────────────────────────────────────── */
 .pool-nav {
   display: flex;
   gap: 0.5rem;
@@ -707,7 +706,6 @@ button {
 .nav-tab.faucet-tab { margin-left: auto; }
 .faucet-log { font-size: 0.75rem; color: #888; }
 
-/* ── Market view ────────────────────────────────────────────────── */
 .market-view, .sell-view, .manage-view {
   padding: 2rem;
   max-width: 1100px;
@@ -733,7 +731,6 @@ button {
 }
 .refresh-btn:hover { border-color: #fff; color: #fff; }
 
-/* ── Vault grid ─────────────────────────────────────────────────── */
 .vault-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -775,7 +772,6 @@ button {
 .select-hint, .own-hint { font-size: 0.72rem; color: #555; }
 .vault-card.selected .select-hint { color: #4ade80; }
 
-/* ── Buy panel ──────────────────────────────────────────────────── */
 .buy-panel {
   background: rgba(255,255,255,0.03);
   border: 1px solid rgba(74,222,128,0.2);
@@ -810,7 +806,6 @@ button {
 .available-info strong { color: #fff; font-size: 1rem; }
 .field-hint { font-size: 0.72rem; color: #555; margin-top: 0.25rem; display: block; }
 
-/* ── Fill result ────────────────────────────────────────────────── */
 .fill-result {
   margin-top: 1.25rem;
   background: rgba(255,255,255,0.03);
@@ -824,7 +819,6 @@ button {
 .fill-metrics small { font-size: 0.72rem; color: #666; }
 .fill-metrics strong { font-size: 1.1rem; }
 
-/* ── Step tracker ───────────────────────────────────────────────── */
 .step-tracker {
   display: flex;
   gap: 0;
@@ -873,7 +867,6 @@ button {
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
 .step-error { color: #f87171; font-size: 0.78rem; margin-top: 0.5rem; grid-column: 1/-1; }
 
-/* ── Sell view ──────────────────────────────────────────────────── */
 .view-header { margin-bottom: 2rem; }
 .view-header h2 { margin: 0 0 0.5rem; }
 .view-header p { color: #888; font-size: 0.88rem; max-width: 600px; margin: 0; }
@@ -902,7 +895,6 @@ button {
 .ex-step strong { font-size: 0.88rem; display: block; margin-bottom: 0.2rem; }
 .ex-step p { margin: 0; font-size: 0.8rem; color: #666; }
 
-/* ── Vault created ──────────────────────────────────────────────── */
 .vault-created {
   margin-top: 1.25rem;
   padding: 1.25rem;
@@ -918,7 +910,6 @@ button {
 .vault-address-card code:hover { color: #fff; }
 .vault-address-card small { font-size: 0.7rem; color: #444; }
 
-/* ── Manage view ────────────────────────────────────────────────── */
 .manage-card {
   background: rgba(255,255,255,0.03);
   border: 1px solid rgba(255,255,255,0.08);
@@ -952,7 +943,6 @@ button {
   background: rgba(255,255,255,0.1) !important;
 }
 
-/* ── Shared ─────────────────────────────────────────────────────── */
 .connect-prompt, .empty-state {
   text-align: center;
   color: #555;
@@ -973,7 +963,6 @@ button {
 
 
 
-/* ── Nav ─────────────────────────────────────────────────────────── */
 .pool-nav {
   display: flex;
   gap: 0.5rem;
@@ -997,7 +986,6 @@ button {
 .nav-tab.faucet-tab { margin-left: auto; }
 .faucet-log { font-size: 0.75rem; color: #888; }
 
-/* ── Market view ────────────────────────────────────────────────── */
 .market-view, .sell-view, .manage-view {
   padding: 2rem;
   max-width: 1100px;
@@ -1023,7 +1011,6 @@ button {
 }
 .refresh-btn:hover { border-color: #fff; color: #fff; }
 
-/* ── Vault grid ─────────────────────────────────────────────────── */
 .vault-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -1065,7 +1052,6 @@ button {
 .select-hint, .own-hint { font-size: 0.72rem; color: #555; }
 .vault-card.selected .select-hint { color: #4ade80; }
 
-/* ── Buy panel ──────────────────────────────────────────────────── */
 .buy-panel {
   background: rgba(255,255,255,0.03);
   border: 1px solid rgba(74,222,128,0.2);
@@ -1100,7 +1086,6 @@ button {
 .available-info strong { color: #fff; font-size: 1rem; }
 .field-hint { font-size: 0.72rem; color: #555; margin-top: 0.25rem; display: block; }
 
-/* ── Fill result ────────────────────────────────────────────────── */
 .fill-result {
   margin-top: 1.25rem;
   background: rgba(255,255,255,0.03);
@@ -1114,7 +1099,6 @@ button {
 .fill-metrics small { font-size: 0.72rem; color: #666; }
 .fill-metrics strong { font-size: 1.1rem; }
 
-/* ── Step tracker ───────────────────────────────────────────────── */
 .step-tracker {
   display: flex;
   gap: 0;
@@ -1163,7 +1147,6 @@ button {
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
 .step-error { color: #f87171; font-size: 0.78rem; margin-top: 0.5rem; grid-column: 1/-1; }
 
-/* ── Sell view ──────────────────────────────────────────────────── */
 .view-header { margin-bottom: 2rem; }
 .view-header h2 { margin: 0 0 0.5rem; }
 .view-header p { color: #888; font-size: 0.88rem; max-width: 600px; margin: 0; }
@@ -1192,7 +1175,6 @@ button {
 .ex-step strong { font-size: 0.88rem; display: block; margin-bottom: 0.2rem; }
 .ex-step p { margin: 0; font-size: 0.8rem; color: #666; }
 
-/* ── Vault created ──────────────────────────────────────────────── */
 .vault-created {
   margin-top: 1.25rem;
   padding: 1.25rem;
@@ -1208,7 +1190,6 @@ button {
 .vault-address-card code:hover { color: #fff; }
 .vault-address-card small { font-size: 0.7rem; color: #444; }
 
-/* ── Manage view ────────────────────────────────────────────────── */
 .manage-card {
   background: rgba(255,255,255,0.03);
   border: 1px solid rgba(255,255,255,0.08);
@@ -1242,7 +1223,6 @@ button {
   background: rgba(255,255,255,0.1) !important;
 }
 
-/* ── Shared ─────────────────────────────────────────────────────── */
 .connect-prompt, .empty-state {
   text-align: center;
   color: #555;
@@ -1259,7 +1239,6 @@ button {
 }
 .tx-link:hover { color: #aaa; }
 
-/* ── Token mint pill in nav ──────────────────────────────────────── */
 .token-pill {
   display: flex;
   align-items: center;
@@ -1295,7 +1274,6 @@ button {
 
 
 
-/* ── Nav ─────────────────────────────────────────────────────────── */
 .pool-nav {
   display: flex;
   gap: 0.5rem;
@@ -1319,7 +1297,6 @@ button {
 .nav-tab.faucet-tab { margin-left: auto; }
 .faucet-log { font-size: 0.75rem; color: #888; }
 
-/* ── Market view ────────────────────────────────────────────────── */
 .market-view, .sell-view, .manage-view {
   padding: 2rem;
   max-width: 1100px;
@@ -1345,7 +1322,6 @@ button {
 }
 .refresh-btn:hover { border-color: #fff; color: #fff; }
 
-/* ── Vault grid ─────────────────────────────────────────────────── */
 .vault-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -1387,7 +1363,6 @@ button {
 .select-hint, .own-hint { font-size: 0.72rem; color: #555; }
 .vault-card.selected .select-hint { color: #4ade80; }
 
-/* ── Buy panel ──────────────────────────────────────────────────── */
 .buy-panel {
   background: rgba(255,255,255,0.03);
   border: 1px solid rgba(74,222,128,0.2);
@@ -1422,7 +1397,6 @@ button {
 .available-info strong { color: #fff; font-size: 1rem; }
 .field-hint { font-size: 0.72rem; color: #555; margin-top: 0.25rem; display: block; }
 
-/* ── Fill result ────────────────────────────────────────────────── */
 .fill-result {
   margin-top: 1.25rem;
   background: rgba(255,255,255,0.03);
@@ -1436,7 +1410,6 @@ button {
 .fill-metrics small { font-size: 0.72rem; color: #666; }
 .fill-metrics strong { font-size: 1.1rem; }
 
-/* ── Step tracker ───────────────────────────────────────────────── */
 .step-tracker {
   display: flex;
   gap: 0;
@@ -1485,7 +1458,6 @@ button {
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
 .step-error { color: #f87171; font-size: 0.78rem; margin-top: 0.5rem; grid-column: 1/-1; }
 
-/* ── Sell view ──────────────────────────────────────────────────── */
 .view-header { margin-bottom: 2rem; }
 .view-header h2 { margin: 0 0 0.5rem; }
 .view-header p { color: #888; font-size: 0.88rem; max-width: 600px; margin: 0; }
@@ -1514,7 +1486,6 @@ button {
 .ex-step strong { font-size: 0.88rem; display: block; margin-bottom: 0.2rem; }
 .ex-step p { margin: 0; font-size: 0.8rem; color: #666; }
 
-/* ── Vault created ──────────────────────────────────────────────── */
 .vault-created {
   margin-top: 1.25rem;
   padding: 1.25rem;
@@ -1530,7 +1501,6 @@ button {
 .vault-address-card code:hover { color: #fff; }
 .vault-address-card small { font-size: 0.7rem; color: #444; }
 
-/* ── Manage view ────────────────────────────────────────────────── */
 .manage-card {
   background: rgba(255,255,255,0.03);
   border: 1px solid rgba(255,255,255,0.08);
@@ -1564,7 +1534,6 @@ button {
   background: rgba(255,255,255,0.1) !important;
 }
 
-/* ── Shared ─────────────────────────────────────────────────────── */
 .connect-prompt, .empty-state {
   text-align: center;
   color: #555;
@@ -1581,7 +1550,6 @@ button {
 }
 .tx-link:hover { color: #aaa; }
 
-/* ── Token mint pill in nav ──────────────────────────────────────── */
 .token-pill {
   display: flex;
   align-items: center;
@@ -1614,7 +1582,6 @@ button {
   white-space: nowrap;
 }
 
-/* ── Existing vault notice ───────────────────────────────────────── */
 .existing-vault-notice {
   background: rgba(251,191,36,0.05);
   border: 1px solid rgba(251,191,36,0.2);

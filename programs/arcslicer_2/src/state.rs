@@ -1,5 +1,3 @@
-// programs/arcslicer_2/src/state.rs
-
 use anchor_lang::prelude::*;
 
 #[account]
@@ -46,13 +44,9 @@ pub struct ChildSlice {
     pub price_per_token: u64,
     pub is_filled: bool,
     pub bump: u8,
-    /// Plaintext fill amount in lamports, verified and stored by the MPC callback.
     pub filled_lamports: u64,
-    /// Plaintext USDC cost in micro-units, verified and stored by the MPC callback.
     pub cost_usdc: u64,
-    /// True once finalize_fill has acknowledged the callback result.
     pub is_finalized: bool,
-    /// True once settle has been called and tokens have been exchanged
     pub is_settled: bool,
 }
 

@@ -20,8 +20,6 @@ use state::*;
 pub mod arcslicer_2 {
     use super::*;
 
-    // ── One-time setup ────────────────────────────────────────────
-
     pub fn init_vault_balance_comp_def(ctx: Context<InitVaultBalanceCompDef>) -> Result<()> {
         init_comp_def(
             ctx.accounts,
@@ -57,8 +55,6 @@ pub mod arcslicer_2 {
         )?;
         Ok(())
     }
-
-    // ── SELLER: deposit + init encrypted vault ────────────────────
 
     pub fn deposit_and_init_vault(
         ctx: Context<DepositAndInitVault>,
@@ -150,8 +146,6 @@ pub mod arcslicer_2 {
         });
         Ok(())
     }
-
-    // ── BUYER: submit encrypted buy order ─────────────────────────
 
     pub fn secure_buy_request(
         ctx: Context<SecureBuyRequest>,
@@ -261,11 +255,6 @@ pub mod arcslicer_2 {
         Ok(())
     }
 
-    // ── BUYER: report decrypted fill + cost to finalize ───────────
-    //
-    // Called by the buyer after the MPC callback stores the verified result.
-    // This only marks the stored fill as ready for settlement.
-
     pub fn finalize_fill(ctx: Context<FinalizeFill>) -> Result<()> {
         let child = &mut ctx.accounts.child_slice;
         require!(child.is_filled, ErrorCode::NotYetFilled);
@@ -282,13 +271,6 @@ pub mod arcslicer_2 {
         Ok(())
     }
 
-    // ── SETTLE: exchange tokens between buyer and seller ──────────
-    //
-    // Called by the buyer after finalize_fill.
-    // Transfers filled wSOL from vault → buyer's wSOL ATA.
-    // Transfers cost USDC from buyer's USDC ATA → seller's USDC ATA.
-    // No Arcium involvement — pure SPL token transfers.
-
     pub fn settle(ctx: Context<Settle>) -> Result<()> {
         let child = &ctx.accounts.child_slice;
         require!(child.is_finalized, ErrorCode::NotFinalized);
@@ -303,7 +285,6 @@ pub mod arcslicer_2 {
         let mint_key = parent.mint;
         let vault_bump = parent.vault_bump;
 
-        // 1. Transfer wSOL from vault PDA → buyer's wSOL ATA
         let seeds = &[
             b"vault",
             owner_key.as_ref(),
@@ -323,7 +304,6 @@ pub mod arcslicer_2 {
             filled_lamports,
         )?;
 
-        // 2. Transfer USDC from buyer → seller's USDC ATA
         token::transfer(
             CpiContext::new(
                 ctx.accounts.token_program.to_account_info(),
@@ -349,8 +329,6 @@ pub mod arcslicer_2 {
 
         Ok(())
     }
-
-    // ── SELLER: withdraw unsold tokens ────────────────────────────
 
     pub fn withdraw_remainder(ctx: Context<WithdrawRemainder>) -> Result<()> {
         let parent = &mut ctx.accounts.slicer_parent;
@@ -396,8 +374,6 @@ pub mod arcslicer_2 {
         Ok(())
     }
 }
-
-// ── ACCOUNT STRUCTS ────────────────────────────────────────────────
 
 #[init_computation_definition_accounts("init_vault_balance", payer)]
 #[derive(Accounts)]
@@ -597,8 +573,6 @@ pub struct MatchSliceV2Callback<'info> {
     pub child_slice: Account<'info, ChildSlice>,
 }
 
-// ── FinalizeFill ──────────────────────────────────────────────────
-
 #[derive(Accounts)]
 pub struct FinalizeFill<'info> {
     #[account(mut)]
@@ -617,11 +591,8 @@ pub struct FinalizeFill<'info> {
     pub slicer_parent: Account<'info, SlicerParent>,
 }
 
-// ── Settle ────────────────────────────────────────────────────────
-
 #[derive(Accounts)]
 pub struct Settle<'info> {
-    /// Buyer signs and pays USDC
     #[account(mut)]
     pub buyer: Signer<'info>,
 
@@ -640,7 +611,6 @@ pub struct Settle<'info> {
     )]
     pub slicer_parent: Account<'info, SlicerParent>,
 
-    /// Vault PDA holding the seller's wSOL — authority is the vault itself
     #[account(
         mut,
         seeds = [b"vault", slicer_parent.owner.as_ref(), slicer_parent.mint.as_ref()],
@@ -648,7 +618,6 @@ pub struct Settle<'info> {
     )]
     pub vault_token_account: Box<Account<'info, TokenAccount>>,
 
-    /// Buyer's wSOL ATA — receives the filled SOL
     #[account(
         mut,
         constraint = buyer_wsol_ata.owner == buyer.key(),
@@ -656,7 +625,6 @@ pub struct Settle<'info> {
     )]
     pub buyer_wsol_ata: Box<Account<'info, TokenAccount>>,
 
-    /// Buyer's USDC ATA — pays the seller
     #[account(
         mut,
         constraint = buyer_usdc_ata.owner == buyer.key(),
@@ -664,7 +632,6 @@ pub struct Settle<'info> {
     )]
     pub buyer_usdc_ata: Box<Account<'info, TokenAccount>>,
 
-    /// Seller's USDC ATA — receives payment
     #[account(
         mut,
         constraint = seller_usdc_ata.owner == slicer_parent.owner,
@@ -674,8 +641,6 @@ pub struct Settle<'info> {
 
     pub token_program: Program<'info, Token>,
 }
-
-// ── WithdrawRemainder ─────────────────────────────────────────────
 
 #[derive(Accounts)]
 pub struct WithdrawRemainder<'info> {
@@ -698,8 +663,6 @@ pub struct WithdrawRemainder<'info> {
     pub token_program: Program<'info, Token>,
 }
 
-// ── CloseVault ───────────────────────────────────────────────────
-
 #[derive(Accounts)]
 pub struct CloseVault<'info> {
     #[account(mut)]
@@ -716,8 +679,6 @@ pub struct CloseVault<'info> {
     )]
     pub vault_token_account: Account<'info, TokenAccount>,
 }
-
-// ── EVENTS ─────────────────────────────────────────────────────────
 
 #[event]
 pub struct VaultInitQueued {
@@ -761,29 +722,27 @@ pub struct Settled {
     pub cost_usdc: u64,
 }
 
-// ── ERRORS ─────────────────────────────────────────────────────────
-
 #[error_code]
 pub enum ErrorCode {
-    #[msg("Arcium cluster not set on MXE account")]
+    #[msg("The private matching cluster is not ready yet")]
     ClusterNotSet,
-    #[msg("MPC computation was aborted")]
+    #[msg("The private match did not complete")]
     AbortedComputation,
     #[msg("Nothing left to withdraw")]
     NothingToWithdraw,
     #[msg("Already withdrawn")]
     AlreadyWithdrawn,
-    #[msg("MPC callback has not fired yet")]
+    #[msg("The match result is not ready yet")]
     NotYetFilled,
-    #[msg("Fill already finalized")]
+    #[msg("This fill was already finalized")]
     AlreadyFinalized,
     #[msg("Fill amount exceeds vault remaining balance")]
     FillExceedsBalance,
-    #[msg("Fill not yet finalized — call finalize_fill first")]
+    #[msg("Finalize this fill before settling it")]
     NotFinalized,
-    #[msg("Already settled")]
+    #[msg("This order is already settled")]
     AlreadySettled,
-    #[msg("Nothing to settle — fill amount is zero")]
+    #[msg("Nothing to settle for this order")]
     NothingToSettle,
     #[msg("Vault still has an active remaining balance")]
     VaultStillActive,

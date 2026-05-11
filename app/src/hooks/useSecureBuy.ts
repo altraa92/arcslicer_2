@@ -1,15 +1,3 @@
-/**
- * useSecureBuy.ts
- *
- * Buyer flow:
- *  1. Encrypt order (amount + max price)
- *  2. Submit secure_buy_request → Arcium queues match_slice_v2
- *  3. Wait for MatchResultEvent, decrypt fill result
- *  4. finalize_fill — acknowledges the plaintext result stored by the callback
- *  5. settle — transfers wSOL from vault → buyer, USDC from buyer → seller
- *  6. closeAccount — unwraps buyer's wSOL ATA → native SOL in wallet
- */
-
 import { useState, useCallback } from "react";
 import * as anchor from "@coral-xyz/anchor";
 import { LAMPORTS_PER_SOL, PublicKey, Transaction } from "@solana/web3.js";
@@ -34,6 +22,23 @@ import { randomBytes, compDefOffset, USDC_MINT } from "../config/constants";
 
 const CLUSTER_OFFSET = 456;
 const MIN_BUYER_SOL_BALANCE = 0.01 * LAMPORTS_PER_SOL;
+
+const friendlyBuyError = (e: any) => {
+  const message = e?.message ?? String(e ?? "");
+  if (/user rejected|rejected/i.test(message)) {
+    return "Transaction cancelled.";
+  }
+  if (/insufficient lamports|0x1/i.test(message)) {
+    return "This wallet needs more devnet SOL for fees. Add SOL and try again.";
+  }
+  if (/AccountNotInitialized|buyer_usdc_ata/i.test(message)) {
+    return "This wallet needs a USDC account first. Use the faucet, then try again.";
+  }
+  if (/blockhash|timeout|timed out/i.test(message)) {
+    return "The network took too long to respond. Please try again.";
+  }
+  return message || "Buy failed. Please try again.";
+};
 
 export type BuyStatus =
   | "idle"
@@ -155,7 +160,7 @@ export function useSecureBuy(
         throw new Error(
           `Buyer USDC balance is too low. Need ${(
             Number(expectedCost) / 1e6
-          ).toFixed(6)} USDC for this fill.`
+          ).toFixed(6)} USDC to complete this order.`
         );
       }
 
@@ -193,7 +198,6 @@ export function useSecureBuy(
       setFillResult(null);
 
       try {
-        // ── 1. Encrypt ────────────────────────────────────────────
         if (!cipher.ready) await cipher.init();
         setStatus("encrypting");
 
@@ -210,7 +214,7 @@ export function useSecureBuy(
           throw new Error(
             `Buyer wallet has ${(buyerLamports / LAMPORTS_PER_SOL).toFixed(
               4
-            )} SOL. Arcium queueing needs about 0.006 SOL plus fees, so fund this wallet with devnet SOL first.`
+            )} SOL. Add devnet SOL before buying.`
           );
         }
 
@@ -228,7 +232,6 @@ export function useSecureBuy(
           program.programId
         );
 
-        // ── 2. Subscribe to event before sending ─────────────────
         const resultPromise = new Promise<FillResult>((resolve, reject) => {
           const listener = program.addEventListener(
             "matchResultEvent",
@@ -251,14 +254,13 @@ export function useSecureBuy(
             }
           );
           setTimeout(
-            () => reject(new Error("MPC timeout: no result after 120s")),
+            () => reject(new Error("The match is taking longer than expected. Please try again.")),
             120_000
           );
         });
 
         setStatus("sending");
 
-        // ── 3. Submit buy request ─────────────────────────────────
         const sig = await program.methods
           .secureBuyRequest(
             computationOffset,
@@ -289,7 +291,6 @@ export function useSecureBuy(
         setTxSig(sig);
         setStatus("waiting");
 
-        // ── 4. Wait for MPC + decrypt ─────────────────────────────
         await awaitComputationFinalization(
           provider,
           computationOffset,
@@ -300,7 +301,6 @@ export function useSecureBuy(
         const result = await resultPromise;
         setFillResult(result);
 
-        // No fill — nothing to settle
         if (result.filledAmount === 0n) {
           setStatus("done");
           return;
@@ -308,7 +308,6 @@ export function useSecureBuy(
 
         setStatus("finalizing");
 
-        // ── 5. finalize_fill — acknowledge callback result ────────
         await program.methods
           .finalizeFill()
           .accountsPartial({
@@ -320,12 +319,11 @@ export function useSecureBuy(
 
         setStatus("settling");
 
-        // ── 6. settle — transfer tokens and unwrap received wSOL ──
         await settleFilledChild(childSlice, params.slicerParentKey, result.cost);
 
         setStatus("done");
       } catch (e: any) {
-        setError(e?.message ?? "Unknown error");
+        setError(friendlyBuyError(e));
         setStatus("error");
       }
     },

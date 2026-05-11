@@ -1,7 +1,3 @@
-// src/hooks/useFaucet.ts
-// Sends 1000 devnet USDC to the connected wallet.
-// SOL for gas: users get that themselves via "Get SOL" which hits Solana's native airdrop.
-
 import { useState } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import {
@@ -20,22 +16,35 @@ import {
 import { sendAndConfirmTransaction } from "@solana/web3.js";
 import { USDC_MINT } from "../config/constants";
 
-const USDC_UNITS = 1000n; // 1000 USDC
+const USDC_UNITS = 1000n;
+
+const friendlyFaucetError = (e: any) => {
+  const message = e?.message ?? String(e ?? "");
+  if (/rate limit|429/i.test(message)) {
+    return "The faucet is busy right now. Please wait a bit and try again.";
+  }
+  if (/missing.*key|VITE_FAUCET_SECRET_KEY/i.test(message)) {
+    return "The faucet is not configured for this build.";
+  }
+  if (/depleted/i.test(message)) {
+    return "The faucet is out of USDC for now.";
+  }
+  return message || "Faucet request failed. Please try again.";
+};
 
 export const useFaucet = () => {
   const { connection } = useConnection();
   const { publicKey }  = useWallet();
   const [isDropping,  setIsDropping]  = useState(false);
-  const [isSolDrop,   setIsSolDrop]   = useState(false); // unused but kept for type compat
+  const [isSolDrop,   setIsSolDrop]   = useState(false);
   const [faucetLog,   setFaucetLog]   = useState<string>("");
 
-  // One button: 2 SOL airdrop + 1000 USDC mint
-  const requestSolAirdrop = async () => {}; // kept for compatibility, not used
+  const requestSolAirdrop = async () => {};
 
   const requestAirdrop = async () => {
     if (!publicKey) return setFaucetLog("Connect wallet first.");
     setIsDropping(true);
-    setFaucetLog("Requesting SOL + minting 1000 USDC…");
+    setFaucetLog("Requesting SOL and 1000 USDC...");
 
     try {
       const secretKeyString = import.meta.env.VITE_FAUCET_SECRET_KEY;
@@ -45,12 +54,11 @@ export const useFaucet = () => {
         Uint8Array.from(JSON.parse(secretKeyString))
       );
 
-      // SOL airdrop first (non-fatal if rate limited)
       try {
         const solSig = await connection.requestAirdrop(publicKey, 2 * LAMPORTS_PER_SOL);
         await connection.confirmTransaction(solSig, "confirmed");
       } catch {
-        setFaucetLog("SOL airdrop rate limited — continuing with USDC…");
+        setFaucetLog("SOL airdrop is busy. Sending USDC now...");
       }
 
       const tx = new Transaction();
@@ -80,9 +88,9 @@ export const useFaucet = () => {
       }
 
       const sig = await sendAndConfirmTransaction(connection, tx, [funderKeypair]);
-      setFaucetLog(`Done — 2 SOL + 1000 USDC sent. Add USDC to Phantom using the mint address above. Tx: ${sig.slice(0, 8)}…`);
+      setFaucetLog(`Done. 2 SOL and 1000 USDC sent. Tx: ${sig.slice(0, 8)}...`);
     } catch (e: any) {
-      setFaucetLog(`Failed: ${e.message}`);
+      setFaucetLog(friendlyFaucetError(e));
     } finally {
       setIsDropping(false);
     }

@@ -808,9 +808,6 @@
       "accounts": [
         {
           "name": "buyer",
-          "docs": [
-            "Buyer signs and pays USDC"
-          ],
           "writable": true,
           "signer": true,
           "relations": [
@@ -827,9 +824,6 @@
         },
         {
           "name": "vault_token_account",
-          "docs": [
-            "Vault PDA holding the seller's wSOL — authority is the vault itself"
-          ],
           "writable": true,
           "pda": {
             "seeds": [
@@ -858,23 +852,14 @@
         },
         {
           "name": "buyer_wsol_ata",
-          "docs": [
-            "Buyer's wSOL ATA — receives the filled SOL"
-          ],
           "writable": true
         },
         {
           "name": "buyer_usdc_ata",
-          "docs": [
-            "Buyer's USDC ATA — pays the seller"
-          ],
           "writable": true
         },
         {
           "name": "seller_usdc_ata",
-          "docs": [
-            "Seller's USDC ATA — receives payment"
-          ],
           "writable": true
         },
         {
@@ -1169,12 +1154,12 @@
     {
       "code": 6000,
       "name": "ClusterNotSet",
-      "msg": "Arcium cluster not set on MXE account"
+      "msg": "The private matching cluster is not ready yet"
     },
     {
       "code": 6001,
       "name": "AbortedComputation",
-      "msg": "MPC computation was aborted"
+      "msg": "The private match did not complete"
     },
     {
       "code": 6002,
@@ -1189,12 +1174,12 @@
     {
       "code": 6004,
       "name": "NotYetFilled",
-      "msg": "MPC callback has not fired yet"
+      "msg": "The match result is not ready yet"
     },
     {
       "code": 6005,
       "name": "AlreadyFinalized",
-      "msg": "Fill already finalized"
+      "msg": "This fill was already finalized"
     },
     {
       "code": 6006,
@@ -1204,17 +1189,17 @@
     {
       "code": 6007,
       "name": "NotFinalized",
-      "msg": "Fill not yet finalized — call finalize_fill first"
+      "msg": "Finalize this fill before settling it"
     },
     {
       "code": 6008,
       "name": "AlreadySettled",
-      "msg": "Already settled"
+      "msg": "This order is already settled"
     },
     {
       "code": 6009,
       "name": "NothingToSettle",
-      "msg": "Nothing to settle — fill amount is zero"
+      "msg": "Nothing to settle for this order"
     },
     {
       "code": 6010,
@@ -1329,30 +1314,18 @@
           },
           {
             "name": "filled_lamports",
-            "docs": [
-              "Plaintext fill amount in lamports, verified and stored by the MPC callback."
-            ],
             "type": "u64"
           },
           {
             "name": "cost_usdc",
-            "docs": [
-              "Plaintext USDC cost in micro-units, verified and stored by the MPC callback."
-            ],
             "type": "u64"
           },
           {
             "name": "is_finalized",
-            "docs": [
-              "True once finalize_fill has acknowledged the callback result."
-            ],
             "type": "bool"
           },
           {
             "name": "is_settled",
-            "docs": [
-              "True once settle has been called and tokens have been exchanged"
-            ],
             "type": "bool"
           }
         ]
