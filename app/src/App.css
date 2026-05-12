@@ -240,6 +240,7 @@ svg {
 .wallet-pill .wallet-adapter-button,
 .wallet-pill .wallet-adapter-button-trigger {
   min-width: 0 !important;
+  justify-content: center !important;
   height: 46px !important;
   min-height: 46px !important;
   padding: 0 4px !important;
@@ -263,6 +264,14 @@ svg {
 .wallet-pill .wallet-adapter-button-start-icon,
 .wallet-pill .wallet-adapter-button-start-icon img {
   display: none !important;
+}
+
+.wallet-pill .wallet-adapter-dropdown {
+  width: 100%;
+}
+
+.wallet-adapter-dropdown-list {
+  z-index: 200 !important;
 }
 
 .wallet-adapter-modal-overlay {
@@ -1330,16 +1339,24 @@ svg {
     height: 42px;
     justify-content: center;
     padding: 0 12px;
-    overflow: hidden;
+    overflow: visible;
   }
 
   .wallet-pill .wallet-adapter-button,
   .wallet-pill .wallet-adapter-button-trigger {
     width: 100% !important;
     max-width: 100% !important;
+    justify-content: center !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
     white-space: nowrap !important;
+  }
+
+  .wallet-adapter-dropdown-list {
+    right: 0 !important;
+    left: auto !important;
+    width: 100% !important;
+    min-width: 100% !important;
   }
 
   .wallet-adapter-modal-container {
