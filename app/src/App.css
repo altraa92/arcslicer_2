@@ -112,9 +112,7 @@ svg {
 .tx-link:hover,
 .withdraw-action:hover:not(:disabled),
 .vault-row:hover,
-.vault-row.selected,
-.row-price-input:hover,
-.row-price-input:focus {
+.vault-row.selected {
   border-color: var(--color-accent);
   outline: 1px solid var(--color-accent);
   outline-offset: -2px;
@@ -262,6 +260,11 @@ svg {
   color: var(--color-accent) !important;
 }
 
+.wallet-pill .wallet-adapter-button-start-icon,
+.wallet-pill .wallet-adapter-button-start-icon img {
+  display: none !important;
+}
+
 .wallet-adapter-modal-overlay {
   background: rgba(0, 0, 0, 0.82) !important;
 }
@@ -345,12 +348,15 @@ svg {
   font-size: 15px !important;
 }
 
-.wallet-adapter-modal-list .wallet-adapter-button-end-icon,
 .wallet-adapter-modal-list .wallet-adapter-button-start-icon,
-.wallet-adapter-modal-list .wallet-adapter-button-end-icon img,
 .wallet-adapter-modal-list .wallet-adapter-button-start-icon img {
-  width: 24px !important;
-  height: 24px !important;
+  display: none !important;
+}
+
+.wallet-adapter-modal-list .wallet-adapter-button-end-icon,
+.wallet-adapter-modal-list .wallet-adapter-button-end-icon img {
+  width: 20px !important;
+  height: 20px !important;
   border-radius: 4px !important;
 }
 
@@ -669,7 +675,7 @@ svg {
 .vault-row {
   min-height: 112px;
   display: grid;
-  grid-template-columns: minmax(220px, 1.1fr) 168px 148px 120px minmax(320px, auto);
+  grid-template-columns: minmax(220px, 1.1fr) 168px 148px minmax(120px, 1fr) auto;
   align-items: center;
   gap: 24px;
   padding: 24px 28px;
@@ -767,33 +773,26 @@ svg {
 }
 
 .vault-row-actions {
-  display: grid;
-  grid-template-columns: minmax(148px, 1fr) auto;
-  gap: 12px;
+  justify-self: end;
+  display: flex;
   align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
 }
 
-.row-price-input {
-  width: 100%;
-  height: 44px;
-  padding: 0 14px;
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  outline: none;
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-family: var(--font-mono);
-  font-size: 16px;
-  line-height: 1;
-}
-
-.row-price-input::placeholder {
+.vault-row-affordance {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
   color: var(--color-text-muted);
 }
 
-.row-price-input:hover,
-.row-price-input:focus {
-  border-color: var(--color-accent);
+.vault-row:hover .vault-row-affordance,
+.vault-row.selected .vault-row-affordance {
+  color: var(--color-accent);
 }
 
 .skeleton-row {
@@ -1181,7 +1180,7 @@ svg {
   color: var(--color-text-muted);
   font-family: var(--font-mono);
   font-size: 15px;
-  line-height: 1;
+  line-height: 1.35;
 }
 
 .app-footer div {
@@ -1290,7 +1289,7 @@ svg {
   }
 
   .vault-row-actions {
-    grid-template-columns: 1fr auto;
+    justify-self: start;
   }
 
   .step-tracker,
@@ -1306,30 +1305,31 @@ svg {
 
   .top-nav-inner {
     height: auto;
-    min-height: 64px;
+    min-height: 118px;
     grid-template-columns: 1fr;
-    padding: 12px 16px;
+    justify-items: center;
+    gap: 14px;
+    padding: 18px 16px 14px;
   }
 
   .wordmark {
-    font-size: 26px;
+    justify-self: center;
+    font-size: 36px;
+    letter-spacing: 0.09em;
   }
 
   .nav-actions {
-    justify-self: start;
+    justify-self: center;
+    width: min(100%, 320px);
+    display: flex;
+    justify-content: center;
+  }
+
+  .wallet-pill {
     width: 100%;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 10px;
-  }
-
-  .wallet-pill {
-    height: 44px;
-    padding: 0 14px;
-  }
-
-  .wallet-pill {
-    justify-self: stretch;
+    height: 42px;
+    justify-content: center;
+    padding: 0 12px;
     overflow: hidden;
   }
 
@@ -1356,12 +1356,41 @@ svg {
   }
 
   .stats-strip {
-    grid-template-columns: 1fr;
-    padding: 12px 16px;
+    grid-template-columns: repeat(5, minmax(112px, 1fr));
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding: 10px 16px;
+    scrollbar-width: none;
+  }
+
+  .stats-strip::-webkit-scrollbar {
+    display: none;
+  }
+
+  .stat-cell {
+    min-width: 112px;
+    padding: 0 12px;
+    border-top: 0;
+    border-left: 1px solid var(--color-border);
+  }
+
+  .stat-cell:first-child {
+    padding-left: 0;
+    border-left: 0;
   }
 
   .stat-cell:nth-child(2) {
-    border-top: 1px solid var(--color-border);
+    border-top: 0;
+  }
+
+  .stat-cell span {
+    font-size: 10px;
+    letter-spacing: 0.09em;
+  }
+
+  .stat-cell strong {
+    margin-top: 8px;
+    font-size: 20px;
   }
 
   .tab-strip {
@@ -1403,14 +1432,76 @@ svg {
     padding: 20px 16px;
   }
 
+  .vault-rows {
+    overflow-x: auto;
+    margin-right: -16px;
+    margin-left: -16px;
+    padding: 0 16px 4px;
+    scrollbar-width: none;
+  }
+
+  .vault-rows::-webkit-scrollbar {
+    display: none;
+  }
+
+  .vault-row {
+    min-width: 520px;
+    min-height: 84px;
+    grid-template-columns: 116px 84px 82px minmax(56px, 1fr) auto;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .vault-row-main span {
+    font-size: 12px;
+  }
+
+  .vault-row-main strong {
+    font-size: 18px;
+  }
+
+  .vault-row-status {
+    gap: 8px;
+  }
+
+  .live-badge,
+  .vault-row-status code,
+  .vault-row-meta span {
+    font-size: 11px;
+  }
+
+  .vault-row-meta strong {
+    font-size: 15px;
+  }
+
+  .vault-row-actions {
+    justify-self: end;
+  }
+
+  .vault-row-actions .ghost-button {
+    min-height: 36px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+
   .section-header,
   .app-footer,
   .history-row-top {
     display: grid;
   }
 
-  .vault-row-actions {
-    grid-template-columns: 1fr;
+  .app-footer {
+    min-height: auto;
+    align-items: start;
+    gap: 12px;
+    padding: 16px;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .app-footer div {
+    flex-wrap: wrap;
+    gap: 10px 16px;
   }
 
   .empty-state {

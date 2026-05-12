@@ -187,21 +187,36 @@ const IconCopy = () => (
 const IconRefresh = ({ spinning = false }: { spinning?: boolean }) => (
   <svg
     className={spinning ? "refresh-icon is-spinning" : "refresh-icon"}
-    width="12"
-    height="12"
-    viewBox="0 0 12 12"
+    width="14"
+    height="14"
+    viewBox="0 0 14 14"
     fill="none"
   >
     <path
-      d="M10 6A4 4 0 112.9 3.5"
+      d="M11.5 5.5A4.8 4.8 0 003.2 3.6L2 4.8"
       stroke="currentColor"
-      strokeWidth="1.2"
+      strokeWidth="1.35"
       strokeLinecap="round"
+      strokeLinejoin="round"
     />
     <path
-      d="M2.5 1.7v2.4h2.4"
+      d="M2 2v2.8h2.8"
       stroke="currentColor"
-      strokeWidth="1.2"
+      strokeWidth="1.35"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M2.5 8.5a4.8 4.8 0 008.3 1.9L12 9.2"
+      stroke="currentColor"
+      strokeWidth="1.35"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <path
+      d="M12 12V9.2H9.2"
+      stroke="currentColor"
+      strokeWidth="1.35"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
@@ -607,9 +622,14 @@ export default function DarkPool() {
                       className={`vault-row ${isOwn ? "own-vault" : ""} ${
                         isActive ? "selected" : ""
                       }`}
-                      onClick={() =>
-                        !isOwn && setSelectedVault(isActive ? null : vault)
-                      }
+                      onClick={() => {
+                        if (isOwn) return;
+                        setSelectedVault(isActive ? null : vault);
+                        if (!isActive) {
+                          setBuyAmtSol("");
+                          setMaxPriceUsdc("");
+                        }
+                      }}
                     >
                       <div className="vault-row-main">
                         <span>{isOwn ? "Your vault" : shortKey(vault.pubkey)}</span>
@@ -638,34 +658,8 @@ export default function DarkPool() {
                         <span />
                       </div>
 
-                      <div className="vault-row-actions">
-                        {!isOwn ? (
-                          <>
-                            <input
-                              className="row-price-input"
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={isActive ? maxPriceUsdc : ""}
-                              onClick={(e) => e.stopPropagation()}
-                              onFocus={() => setSelectedVault(vault)}
-                              onChange={(e) => {
-                                setSelectedVault(vault);
-                                setMaxPriceUsdc(e.target.value);
-                              }}
-                              placeholder="Max USDC"
-                            />
-                            <button
-                              className="ghost-button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedVault(vault);
-                              }}
-                            >
-                              Submit Bid
-                            </button>
-                          </>
-                        ) : (
+                      {isOwn ? (
+                        <div className="vault-row-actions">
                           <button
                             className="ghost-button"
                             onClick={(e) => {
@@ -675,8 +669,12 @@ export default function DarkPool() {
                           >
                             Manage
                           </button>
-                        )}
-                      </div>
+                        </div>
+                      ) : (
+                        <div className="vault-row-affordance" aria-hidden="true">
+                          <IconArrow />
+                        </div>
+                      )}
                     </article>
                   );
                 })}
@@ -1024,7 +1022,11 @@ export default function DarkPool() {
           >
             GitHub
           </a>
-          <a href="https://discord.com/" target="_blank" rel="noreferrer">
+          <a
+            href="https://discord.com/invite/arcium"
+            target="_blank"
+            rel="noreferrer"
+          >
             Discord
           </a>
         </div>
