@@ -18,10 +18,21 @@ import { USDC_MINT } from "../config/constants";
 
 const USDC_UNITS = 1000n;
 
+const friendlySolAirdropError = (e: any) => {
+  const message = e?.message ?? String(e ?? "");
+  if (/rate limit|429|too many|airdrop request failed/i.test(message)) {
+    return "SOL faucet is rate-limited by devnet right now. Try SOL again later.";
+  }
+  if (/blockhash|timeout|timed out/i.test(message)) {
+    return "SOL faucet took too long to respond. Try SOL again later.";
+  }
+  return "SOL was not sent. Try SOL again later.";
+};
+
 const friendlyFaucetError = (e: any) => {
   const message = e?.message ?? String(e ?? "");
   if (/rate limit|429/i.test(message)) {
-    return "The faucet is busy right now. Please wait a bit and try again.";
+    return "The RPC is rate-limited right now, so the faucet transaction did not finish. Please try again later.";
   }
   if (/missing.*key|VITE_FAUCET_SECRET_KEY/i.test(message)) {
     return "The faucet is not configured for this build.";
@@ -39,7 +50,24 @@ export const useFaucet = () => {
   const [isSolDrop,   setIsSolDrop]   = useState(false);
   const [faucetLog,   setFaucetLog]   = useState<string>("");
 
-  const requestSolAirdrop = async () => {};
+  const requestSolAirdrop = async () => {
+    if (!publicKey) return setFaucetLog("Connect wallet first.");
+    setIsSolDrop(true);
+    setFaucetLog("Requesting devnet SOL...");
+
+    try {
+      const solSig = await connection.requestAirdrop(
+        publicKey,
+        2 * LAMPORTS_PER_SOL
+      );
+      await connection.confirmTransaction(solSig, "confirmed");
+      setFaucetLog(`2 SOL sent. Tx: ${solSig.slice(0, 8)}...`);
+    } catch (e: any) {
+      setFaucetLog(friendlySolAirdropError(e));
+    } finally {
+      setIsSolDrop(false);
+    }
+  };
 
   const requestAirdrop = async () => {
     if (!publicKey) return setFaucetLog("Connect wallet first.");
@@ -54,11 +82,16 @@ export const useFaucet = () => {
         Uint8Array.from(JSON.parse(secretKeyString))
       );
 
+      let solSent = false;
+      let solMessage = "";
+
       try {
         const solSig = await connection.requestAirdrop(publicKey, 2 * LAMPORTS_PER_SOL);
         await connection.confirmTransaction(solSig, "confirmed");
-      } catch {
-        setFaucetLog("SOL airdrop is busy. Sending USDC now...");
+        solSent = true;
+      } catch (e: any) {
+        solMessage = friendlySolAirdropError(e);
+        setFaucetLog(`${solMessage} Sending USDC now...`);
       }
 
       const tx = new Transaction();
@@ -88,7 +121,11 @@ export const useFaucet = () => {
       }
 
       const sig = await sendAndConfirmTransaction(connection, tx, [funderKeypair]);
-      setFaucetLog(`Done. 2 SOL and 1000 USDC sent. Tx: ${sig.slice(0, 8)}...`);
+      setFaucetLog(
+        solSent
+          ? `Done. 2 SOL and 1000 USDC sent. USDC tx: ${sig.slice(0, 8)}...`
+          : `1000 USDC sent. ${solMessage} USDC tx: ${sig.slice(0, 8)}...`
+      );
     } catch (e: any) {
       setFaucetLog(friendlyFaucetError(e));
     } finally {

@@ -32,6 +32,12 @@ const friendlyDepositError = (e: any) => {
   if (/already in use/i.test(message)) {
     return "This wallet already has a vault. Withdraw the current vault before creating another one.";
   }
+  if (/VaultStillFunded|Vault token account still holds funds/i.test(message)) {
+    return "This wallet has an older vault that still holds SOL. Withdraw the vault balance before creating a new one, or use a fresh wallet.";
+  }
+  if (/VaultStillActive|Vault still has an active remaining balance/i.test(message)) {
+    return "This wallet already has an active vault. Withdraw the remaining SOL before creating a new one.";
+  }
   if (/blockhash|timeout|timed out/i.test(message)) {
     return "The network took too long to respond. Please try again.";
   }
