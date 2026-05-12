@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="ArcSlicer">
+  <rect width="64" height="64" fill="#000000"/>
+  <rect x="8" y="8" width="48" height="48" fill="none" stroke="#373737" stroke-width="4"/>
+  <path d="M18 48 29 16H35L46 48H39L36.5 40H27.5L25 48H18ZM29 34H35L32 24 29 34Z" fill="#22d98e"/>
+</svg>
