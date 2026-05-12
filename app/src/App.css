@@ -1,13 +1,13 @@
 @import url("https://fonts.googleapis.com/css2?family=SUSE+Mono:wght@400;500;600;700;800&display=swap");
 
 :root {
-  --color-bg: #212121;
-  --color-surface: #262626;
-  --color-card: #2f2f2f;
-  --color-border: #3a3a3a;
-  --color-border-bright: #4a4a4a;
-  --color-accent: #19c37d;
-  --color-accent-dim: #10a37f;
+  --color-bg: #000000;
+  --color-surface: #050505;
+  --color-card: #0a0a0a;
+  --color-border: #373737;
+  --color-border-bright: #696969;
+  --color-accent: #22d98e;
+  --color-accent-dim: #12b981;
   --color-text: #f4f4f4;
   --color-text-secondary: #c7c7c7;
   --color-text-muted: #8a8a8a;
@@ -77,8 +77,8 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 a:focus-visible {
-  outline: 1px solid var(--color-accent);
-  outline-offset: 2px;
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
 }
 
 svg {
@@ -92,105 +92,40 @@ svg {
   background: var(--color-bg);
 }
 
-.darkpool-shell[data-theme="light"] {
-  --color-bg: #f4f4f4;
-  --color-surface: #ffffff;
-  --color-card: #eeeeee;
-  --color-border: #bcbcbc;
-  --color-border-bright: #737373;
-  --color-accent: #008f6b;
-  --color-accent-dim: #047857;
-  --color-text: #151515;
-  --color-text-secondary: #343434;
-  --color-text-muted: #5d5d5d;
-  --color-danger: #b91c1c;
-  --color-warning: #936200;
-}
-
-.darkpool-shell[data-theme="light"] button:focus-visible,
-.darkpool-shell[data-theme="light"] input:focus-visible,
-.darkpool-shell[data-theme="light"] select:focus-visible,
-.darkpool-shell[data-theme="light"] a:focus-visible {
-  outline-width: 2px;
-  outline-offset: 3px;
-}
-
-.darkpool-shell[data-theme="light"] .wallet-pill:hover,
-.darkpool-shell[data-theme="light"] .theme-toggle:hover,
-.darkpool-shell[data-theme="light"] .ghost-button:hover,
-.darkpool-shell[data-theme="light"] .refresh-btn:hover,
-.darkpool-shell[data-theme="light"] .icon-button:hover,
-.darkpool-shell[data-theme="light"] .mint-chip button:hover,
-.darkpool-shell[data-theme="light"] .empty-link:hover,
-.darkpool-shell[data-theme="light"] .tx-link:hover,
-.darkpool-shell[data-theme="light"] .withdraw-action:hover:not(:disabled),
-.darkpool-shell[data-theme="light"] .vault-row:hover,
-.darkpool-shell[data-theme="light"] .vault-row.selected,
-.darkpool-shell[data-theme="light"] .row-price-input:hover,
-.darkpool-shell[data-theme="light"] .row-price-input:focus {
+.wallet-pill:hover,
+.ghost-button:hover,
+.refresh-btn:hover,
+.icon-button:hover,
+.mint-chip button:hover,
+.empty-link:hover,
+.tx-link:hover,
+.withdraw-action:hover:not(:disabled),
+.vault-row:hover,
+.vault-row.selected,
+.row-price-input:hover,
+.row-price-input:focus {
   border-color: var(--color-accent);
   outline: 1px solid var(--color-accent);
   outline-offset: -2px;
 }
 
-.darkpool-shell[data-theme="light"] .vault-row.selected {
+.vault-row.selected {
   outline-width: 2px;
 }
 
-.darkpool-shell[data-theme="light"] .tab-button.active::after {
+.tab-button.active::after {
   height: 3px;
 }
 
-.darkpool-shell[data-theme="light"] .control-field input:hover,
-.darkpool-shell[data-theme="light"] .control-field select:hover,
-.darkpool-shell[data-theme="light"] .control-field input:focus,
-.darkpool-shell[data-theme="light"] .control-field select:focus {
+.control-field input:hover,
+.control-field select:hover,
+.control-field input:focus,
+.control-field select:focus {
   border-bottom-width: 2px;
 }
 
-.darkpool-shell[data-theme="dark"] button:focus-visible,
-.darkpool-shell[data-theme="dark"] input:focus-visible,
-.darkpool-shell[data-theme="dark"] select:focus-visible,
-.darkpool-shell[data-theme="dark"] a:focus-visible {
-  outline-width: 2px;
-  outline-offset: 3px;
-}
-
-.darkpool-shell[data-theme="dark"] .wallet-pill:hover,
-.darkpool-shell[data-theme="dark"] .theme-toggle:hover,
-.darkpool-shell[data-theme="dark"] .ghost-button:hover,
-.darkpool-shell[data-theme="dark"] .refresh-btn:hover,
-.darkpool-shell[data-theme="dark"] .icon-button:hover,
-.darkpool-shell[data-theme="dark"] .mint-chip button:hover,
-.darkpool-shell[data-theme="dark"] .empty-link:hover,
-.darkpool-shell[data-theme="dark"] .tx-link:hover,
-.darkpool-shell[data-theme="dark"] .withdraw-action:hover:not(:disabled),
-.darkpool-shell[data-theme="dark"] .vault-row:hover,
-.darkpool-shell[data-theme="dark"] .vault-row.selected,
-.darkpool-shell[data-theme="dark"] .row-price-input:hover,
-.darkpool-shell[data-theme="dark"] .row-price-input:focus {
-  border-color: var(--color-accent);
-  outline: 1px solid var(--color-accent);
-  outline-offset: -2px;
-}
-
-.darkpool-shell[data-theme="dark"] .vault-row.selected {
-  outline-width: 2px;
-}
-
-.darkpool-shell[data-theme="dark"] .tab-button.active::after {
-  height: 3px;
-}
-
-.darkpool-shell[data-theme="dark"] .control-field input:hover,
-.darkpool-shell[data-theme="dark"] .control-field select:hover,
-.darkpool-shell[data-theme="dark"] .control-field input:focus,
-.darkpool-shell[data-theme="dark"] .control-field select:focus {
-  border-bottom-width: 2px;
-}
-
-.darkpool-shell[data-theme="dark"] .step-item.done .step-dot,
-.darkpool-shell[data-theme="dark"] .step-item.active .step-dot {
+.step-item.done .step-dot,
+.step-item.active .step-dot {
   border-color: var(--color-accent);
   outline: 1px solid var(--color-accent);
   outline-offset: -2px;
@@ -275,8 +210,7 @@ svg {
   min-width: 0;
 }
 
-.wallet-pill,
-.theme-toggle {
+.wallet-pill {
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -289,19 +223,7 @@ svg {
   color: var(--color-text-secondary);
 }
 
-.theme-toggle {
-  border-radius: 8px;
-  cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.wallet-pill:hover,
-.theme-toggle:hover {
+.wallet-pill:hover {
   border-color: var(--color-accent);
   color: var(--color-accent);
 }
@@ -1261,12 +1183,11 @@ svg {
     justify-self: start;
     width: 100%;
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: 10px;
   }
 
-  .wallet-pill,
-  .theme-toggle {
+  .wallet-pill {
     height: 44px;
     padding: 0 14px;
   }

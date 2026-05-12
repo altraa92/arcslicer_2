@@ -176,17 +176,6 @@ const IconCopy = () => (
     />
   </svg>
 );
-const IconTheme = () => (
-  <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-    <circle cx="7.5" cy="7.5" r="3" stroke="currentColor" strokeWidth="1.2" />
-    <path
-      d="M7.5 1.5v1.2M7.5 12.3v1.2M1.5 7.5h1.2M12.3 7.5h1.2M3.25 3.25l.85.85M10.9 10.9l.85.85M11.75 3.25l-.85.85M4.1 10.9l-.85.85"
-      stroke="currentColor"
-      strokeWidth="1.2"
-      strokeLinecap="round"
-    />
-  </svg>
-);
 const IconRefresh = ({ spinning = false }: { spinning?: boolean }) => (
   <svg
     className={spinning ? "refresh-icon is-spinning" : "refresh-icon"}
@@ -248,9 +237,6 @@ export default function DarkPool() {
   const [provider, setProvider] = useState<anchor.AnchorProvider | null>(null);
   const [program, setProgram] = useState<anchor.Program<any> | null>(null);
   const [view, setView] = useState<View>("market");
-  const [theme, setTheme] = useState<"dark" | "light">(() =>
-    window.localStorage.getItem("arcslicer-theme") === "light" ? "light" : "dark"
-  );
 
   const [vaults, setVaults] = useState<VaultEntry[]>([]);
   const [loadingVaults, setLoadingVaults] = useState(false);
@@ -274,10 +260,6 @@ export default function DarkPool() {
     setProvider(prov);
     setProgram(new anchor.Program(idl as any, prov));
   }, [wallet.publicKey, wallet.signTransaction, connection]);
-
-  useEffect(() => {
-    window.localStorage.setItem("arcslicer-theme", theme);
-  }, [theme]);
 
   const cipher = useArciumCipher(provider, program ? PROGRAM_ID : null);
 
@@ -476,7 +458,7 @@ export default function DarkPool() {
   const copyUsdcMint = () => navigator.clipboard.writeText(USDC_MINT.toBase58());
 
   return (
-    <main className="darkpool-shell" data-theme={theme}>
+    <main className="darkpool-shell">
       <header className="top-nav">
         <div className="top-nav-inner">
           <button
@@ -494,14 +476,6 @@ export default function DarkPool() {
           </div>
 
           <div className="nav-actions">
-            <button
-              className="theme-toggle"
-              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
-            >
-              <IconTheme />
-              <span>{theme === "dark" ? "Light" : "Dark"}</span>
-            </button>
             <div className="wallet-pill">
               <IconWallet />
               <WalletMultiButton />
@@ -585,7 +559,7 @@ export default function DarkPool() {
               <div>
                 <h2>Active Vaults</h2>
                 <p>
-                  Seller vaults are public — price floors stay encrypted. Choose
+                  Seller vaults are public price floors stay encrypted. Choose
                   a vault and submit your max USDC price.
                 </p>
               </div>
