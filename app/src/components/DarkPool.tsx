@@ -34,6 +34,14 @@ const fmtSol = (n: bigint) =>
 
 const fmtStatSol = (n: bigint) => (n === 0n ? "—" : fmtSol(n));
 const fmtStatNumber = (n: number) => (n === 0 ? "—" : n.toString());
+const getFilledAmount = (total: bigint, remaining: bigint) =>
+  total > remaining ? total - remaining : 0n;
+const getFillPct = (total: bigint, remaining: bigint) => {
+  if (total <= 0n) return 0;
+  const filled = getFilledAmount(total, remaining);
+  const pct = Number((filled * 10000n) / total) / 100;
+  return Math.max(0, Math.min(100, Math.round(pct)));
+};
 
 const fmtCost = (raw: bigint) =>
   "$" +
@@ -228,7 +236,6 @@ const IconVaultEmpty = () => (
 
 const SLICER_PARENT_LEN =
   8 + 32 + 32 + 32 + 32 + 8 + 8 + 1 + 8 + 1 + 1 + 32 + 32 + 16 + 1; // 244
-const CHILD_SLICE_LEN = 8 + 32 + 32 + 8 + 8 + 1 + 1 + 8 + 8 + 1 + 1; // 108
 
 export default function DarkPool() {
   const { connection } = useConnection();
@@ -290,14 +297,12 @@ export default function DarkPool() {
     if (!program) return;
     setLoadingVaults(true);
     try {
-      const [rawParents, rawChildren] = await Promise.all([
-        program.provider.connection.getProgramAccounts(program.programId, {
+      const rawParents = await program.provider.connection.getProgramAccounts(
+        program.programId,
+        {
           filters: [{ dataSize: SLICER_PARENT_LEN }],
-        }),
-        program.provider.connection.getProgramAccounts(program.programId, {
-          filters: [{ dataSize: CHILD_SLICE_LEN }],
-        }),
-      ]);
+        }
+      );
 
       const parentAccounts = rawParents.flatMap(({ pubkey, account }) => {
         try {
@@ -311,28 +316,6 @@ export default function DarkPool() {
         }
       });
 
-      const childAccounts = rawChildren.flatMap(({ pubkey, account }) => {
-        try {
-          const decoded = program.coder.accounts.decode(
-            "childSlice",
-            account.data
-          );
-          return [{ publicKey: pubkey, account: decoded }];
-        } catch {
-          return [];
-        }
-      });
-
-      const fillMap = new Map<string, bigint>();
-      for (const child of childAccounts) {
-        if (!child.account.isFilled) continue;
-        const parentKey = child.account.parent.toBase58();
-        const filledAmount = BigInt(
-          child.account.filledLamports?.toString() ?? "0"
-        );
-        fillMap.set(parentKey, (fillMap.get(parentKey) ?? 0n) + filledAmount);
-      }
-
       const entries: VaultEntry[] = parentAccounts
         .filter((a: any) => !a.account.isWithdrawn)
         .map((a: any) => {
@@ -340,9 +323,7 @@ export default function DarkPool() {
           const remainingBalance = BigInt(
             a.account.remainingBalance.toString()
           );
-          const filledAmount =
-            fillMap.get(a.publicKey.toBase58()) ??
-            totalDeposit - remainingBalance;
+          const filledAmount = getFilledAmount(totalDeposit, remainingBalance);
           return {
             pubkey: a.publicKey,
             owner: a.account.owner,
@@ -356,6 +337,14 @@ export default function DarkPool() {
         .filter((v: VaultEntry) => v.remainingBalance > 0n);
 
       setVaults(entries);
+      setSelectedVault((current) => {
+        if (!current) return current;
+        return (
+          entries.find(
+            (entry) => entry.pubkey.toBase58() === current.pubkey.toBase58()
+          ) ?? null
+        );
+      });
     } catch (e) {
       console.error("Failed to fetch vaults:", e);
     } finally {
@@ -423,9 +412,10 @@ export default function DarkPool() {
             remainingBalance: BigInt(acc.remainingBalance.toString()),
             isWithdrawn: acc.isWithdrawn,
             urgencyLevel: acc.urgencyLevel,
-            filledAmount:
-              BigInt(acc.totalDeposit.toString()) -
-              BigInt(acc.remainingBalance.toString()),
+            filledAmount: getFilledAmount(
+              BigInt(acc.totalDeposit.toString()),
+              BigInt(acc.remainingBalance.toString())
+            ),
           });
         } else {
           setMyVaultEntry(null);
@@ -607,14 +597,10 @@ export default function DarkPool() {
                     wallet.publicKey?.toBase58() === vault.owner.toBase58();
                   const isActive =
                     selectedVault?.pubkey.toBase58() === vault.pubkey.toBase58();
-                  const fillPct =
-                    vault.totalDeposit > 0n
-                      ? Math.round(
-                          Number(
-                            (vault.filledAmount * 100n) / vault.totalDeposit
-                          )
-                        )
-                      : 0;
+                  const fillPct = getFillPct(
+                    vault.totalDeposit,
+                    vault.remainingBalance
+                  );
                   return (
                     <article
                       key={vault.pubkey.toBase58()}
@@ -917,17 +903,10 @@ export default function DarkPool() {
             )}
             {myVaultEntry &&
               (() => {
-                const fillPct =
-                  myVaultEntry.totalDeposit > 0n
-                    ? Math.round(
-                        Number(
-                          ((myVaultEntry.totalDeposit -
-                            myVaultEntry.remainingBalance) *
-                            100n) /
-                            myVaultEntry.totalDeposit
-                        )
-                      )
-                    : 0;
+                const fillPct = getFillPct(
+                  myVaultEntry.totalDeposit,
+                  myVaultEntry.remainingBalance
+                );
                 return (
                   <div className="manage-card">
                     <div className="manage-row">
