@@ -807,7 +807,7 @@ export default function DarkPool() {
                     step="0.1"
                     value={depositSol}
                     onChange={(e) => setDepositSol(e.target.value)}
-                    placeholder="e.g. 10"
+                    placeholder="e.g. 2"
                   />
                 </label>
                 <label className="control-field">
