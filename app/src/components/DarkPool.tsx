@@ -16,6 +16,13 @@ interface PurchaseRecord {
   timestamp: number;
 }
 
+interface StoredPurchaseRecord {
+  filledAmount: string;
+  cost: string;
+  txSig: string;
+  timestamp: number;
+}
+
 const fmtSol = (n: bigint) =>
   (Number(n) / 1e9).toLocaleString(undefined, { maximumFractionDigits: 4 }) +
   " SOL";
@@ -39,6 +46,43 @@ const fmtEffectivePrice = (cost: bigint, filled: bigint): string => {
 const shortKey = (k: PublicKey | string) => {
   const s = typeof k === "string" ? k : k.toBase58();
   return s.slice(0, 5) + "..." + s.slice(-4);
+};
+
+const purchaseHistoryKey = (walletKey: string) =>
+  `arcslicer:purchases:${walletKey}`;
+
+const loadPurchaseHistory = (walletKey: string): PurchaseRecord[] => {
+  try {
+    const raw = window.localStorage.getItem(purchaseHistoryKey(walletKey));
+    if (!raw) return [];
+    const stored = JSON.parse(raw) as StoredPurchaseRecord[];
+    return stored
+      .filter((item) => item.txSig && item.filledAmount && item.cost)
+      .map((item) => ({
+        filledAmount: BigInt(item.filledAmount),
+        cost: BigInt(item.cost),
+        txSig: item.txSig,
+        timestamp: item.timestamp,
+      }));
+  } catch {
+    return [];
+  }
+};
+
+const savePurchaseHistory = (
+  walletKey: string,
+  purchases: PurchaseRecord[]
+) => {
+  const stored: StoredPurchaseRecord[] = purchases.map((item) => ({
+    filledAmount: item.filledAmount.toString(),
+    cost: item.cost.toString(),
+    txSig: item.txSig,
+    timestamp: item.timestamp,
+  }));
+  window.localStorage.setItem(
+    purchaseHistoryKey(walletKey),
+    JSON.stringify(stored)
+  );
 };
 
 type View = "buy" | "sell" | "position" | "history";
@@ -223,6 +267,7 @@ export default function DarkPool() {
   const [loadingPool, setLoadingPool] = useState(false);
 
   const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
+  const walletKey = wallet.publicKey?.toBase58() ?? null;
 
   useEffect(() => {
     if (!wallet.publicKey || !wallet.signTransaction) return;
@@ -247,6 +292,7 @@ export default function DarkPool() {
     manageStatus,
     txSig,
     fillResult,
+    lastBuyReceipt,
     depositError: dErr,
     buyError: bErr,
     manageError,
@@ -258,15 +304,16 @@ export default function DarkPool() {
     faucetLog,
   } = useFaucet();
 
-  const refreshPool = useCallback(async () => {
+  const refreshPool = useCallback(async (options?: { silent?: boolean }) => {
     if (!program || !wallet.publicKey) return;
-    setLoadingPool(true);
+    const silent = options?.silent ?? false;
+    if (!silent) setLoadingPool(true);
     try {
       setPoolSnapshot(await fetchPool());
     } catch (e) {
       console.error("Failed to fetch private pool:", e);
     } finally {
-      setLoadingPool(false);
+      if (!silent) setLoadingPool(false);
     }
   }, [program, wallet.publicKey, fetchPool]);
 
@@ -275,31 +322,63 @@ export default function DarkPool() {
   }, [refreshPool, dStatus, bStatus, manageStatus]);
 
   useEffect(() => {
+    if (!program || !wallet.publicKey) return;
+    const isActive =
+      poolSnapshot?.isMatching ||
+      ["waiting", "finalizing", "settling"].includes(bStatus) ||
+      ["waiting", "sending"].includes(dStatus) ||
+      ["waiting", "sending"].includes(manageStatus);
+    const timer = window.setInterval(
+      () => refreshPool({ silent: true }),
+      isActive ? 3000 : 7000
+    );
+    return () => window.clearInterval(timer);
+  }, [
+    program,
+    wallet.publicKey,
+    poolSnapshot?.isMatching,
+    dStatus,
+    bStatus,
+    manageStatus,
+    refreshPool,
+  ]);
+
+  useEffect(() => {
     if (!wallet.publicKey) return;
     if (dStatus !== "done" && bStatus !== "done" && manageStatus !== "done") {
       return;
     }
     const timer = window.setTimeout(() => {
-      refreshPool();
+      refreshPool({ silent: true });
     }, 2200);
     return () => window.clearTimeout(timer);
   }, [wallet.publicKey, dStatus, bStatus, manageStatus, refreshPool]);
 
   useEffect(() => {
-    if (bStatus === "done" && program && fillResult && txSig) {
-      if (!purchases.some((p) => p.txSig === txSig)) {
-        setPurchases((prev) => [
-          {
-            filledAmount: fillResult.filledAmount,
-            cost: fillResult.cost,
-            txSig,
-            timestamp: Date.now(),
-          },
-          ...prev,
-        ]);
-      }
+    if (!walletKey) {
+      setPurchases([]);
+      return;
     }
-  }, [bStatus, fillResult, txSig, program, purchases]);
+    setPurchases(loadPurchaseHistory(walletKey));
+  }, [walletKey]);
+
+  useEffect(() => {
+    if (!walletKey || !lastBuyReceipt) return;
+    setPurchases((prev) => {
+      if (prev.some((p) => p.txSig === lastBuyReceipt.txSig)) return prev;
+      const next = [
+        {
+          filledAmount: lastBuyReceipt.filledAmount,
+          cost: lastBuyReceipt.cost,
+          txSig: lastBuyReceipt.txSig,
+          timestamp: Date.now(),
+        },
+        ...prev,
+      ].slice(0, 25);
+      savePurchaseHistory(walletKey, next);
+      return next;
+    });
+  }, [walletKey, lastBuyReceipt]);
 
   const handleDeposit = () => {
     if (!provider || !depositSol || !priceUsdc) return;
@@ -331,9 +410,16 @@ export default function DarkPool() {
   const walletState = wallet.publicKey ? shortKey(wallet.publicKey) : "—";
   const mySlot = poolSnapshot?.mySlot ?? null;
   const myCredit = poolSnapshot?.myCredit ?? 0n;
+  const myPendingCredit = poolSnapshot?.myPendingCredit ?? 0n;
+  const poolSolVaultBalance = poolSnapshot?.poolSolVaultBalance ?? 0n;
   const copyUsdcMint = () => navigator.clipboard.writeText(USDC_MINT.toBase58());
+  const occupiedSlots = poolSnapshot?.occupiedSlots ?? 0;
   const activeSlots = poolSnapshot?.activeSlots ?? 0;
-  const hasLiquidity = activeSlots > 0;
+  const hasLiquidity = activeSlots > 0 && poolSolVaultBalance > 0n;
+  const poolSoldOut =
+    Boolean(poolSnapshot?.isInitialized) &&
+    occupiedSlots > 0 &&
+    poolSolVaultBalance === 0n;
   const totalFilled = purchases.reduce((sum, p) => sum + p.filledAmount, 0n);
   const poolState = !wallet.publicKey
     ? "OFFLINE"
@@ -343,6 +429,8 @@ export default function DarkPool() {
     ? "UNOPENED"
     : poolSnapshot.isMatching
     ? "MATCHING"
+    : !hasLiquidity
+    ? "EMPTY"
     : "READY";
   const buyButtonText = !wallet.publicKey
     ? "Connect Wallet First"
@@ -410,6 +498,8 @@ export default function DarkPool() {
             <p>
               {hasLiquidity
                 ? "Private liquidity is ready for encrypted buy orders."
+                : poolSoldOut
+                ? "The current private liquidity is fully sold. New seller liquidity will reopen buys."
                 : "Add hidden sell liquidity before buyers can execute."}
             </p>
           </div>
@@ -463,7 +553,7 @@ export default function DarkPool() {
               </div>
               <button
                 className="refresh-btn"
-                onClick={refreshPool}
+                onClick={() => refreshPool()}
                 disabled={loadingPool}
               >
                 <IconRefresh spinning={loadingPool} />
@@ -488,14 +578,16 @@ export default function DarkPool() {
 
             {wallet.publicKey && !hasLiquidity && (
               <div className="inline-alert warning">
-                No hidden sell liquidity is active yet. Add liquidity on the
-                right, then this buy form will execute against the pool.
+                {poolSoldOut
+                  ? "The private pool is sold out right now. The buy form will unlock as soon as a seller adds new SOL."
+                  : "No hidden sell liquidity is active yet. Add liquidity in Sell SOL, then this buy form will execute against the pool."}
               </div>
             )}
 
             {wallet.publicKey && poolSnapshot?.isMatching && (
               <div className="inline-alert warning">
-                The pool is matching another order. Wait a moment and refresh.
+                The pool is matching another order. This page refreshes
+                automatically, or you can refresh manually.
               </div>
             )}
 
@@ -577,7 +669,15 @@ export default function DarkPool() {
                     </div>
                   </div>
                 )}
-                {txSig && <TxLink signature={txSig} />}
+                <div className="receipt-actions">
+                  {txSig && <TxLink signature={txSig} />}
+                  <button
+                    className="ghost-button"
+                    onClick={() => setView("history")}
+                  >
+                    View buyer history
+                  </button>
+                </div>
               </div>
             )}
           </section>
@@ -599,7 +699,8 @@ export default function DarkPool() {
             </div>
             <p>
               Buyers submit one encrypted intent. Arcium routes internally
-              across hidden seller slots and returns a single blended result.
+              across hidden seller slots and returns one blended result. Empty
+              pools are blocked before settlement.
             </p>
           </aside>
         </section>
@@ -712,7 +813,13 @@ export default function DarkPool() {
 
           <aside className="side-panel seller-brief">
             <span>Seller progress</span>
-            <strong>{mySlot !== null ? `Slot #${mySlot + 1} active` : "No slot yet"}</strong>
+            <strong>
+              {mySlot !== null
+                ? poolSoldOut
+                  ? `Slot #${mySlot + 1} sold`
+                  : `Slot #${mySlot + 1} active`
+                : "No slot yet"}
+            </strong>
             <div className="progress-list">
               <div className={`progress-line ${mySlot !== null ? "done" : "active"}`}>
                 <IconCheck />
@@ -725,6 +832,10 @@ export default function DarkPool() {
               <div className={`progress-line ${myCredit > 0n ? "done" : "waiting"}`}>
                 <IconStatusDot />
                 <span>Earn USDC as buyers cross</span>
+              </div>
+              <div className={`progress-line ${poolSoldOut ? "done" : "waiting"}`}>
+                <IconStatusDot />
+                <span>Liquidity fully sold</span>
               </div>
             </div>
             <p>
@@ -750,7 +861,7 @@ export default function DarkPool() {
               </div>
               <button
                 className="refresh-btn"
-                onClick={refreshPool}
+                onClick={() => refreshPool()}
                 disabled={loadingPool}
               >
                 <IconRefresh spinning={loadingPool} />
@@ -787,6 +898,25 @@ export default function DarkPool() {
                   <span>Settled USDC credit</span>
                   <strong>{myCredit === 0n ? "—" : fmtCost(myCredit)}</strong>
                 </div>
+                {myPendingCredit > 0n && (
+                  <div className="manage-row warning-row">
+                    <span>Pending settlement</span>
+                    <strong>{fmtCost(myPendingCredit)}</strong>
+                  </div>
+                )}
+                {poolSoldOut && (
+                  <div className="inline-alert success">
+                    This pool has no SOL left to buy. Withdraw settled USDC, or
+                    add a fresh hidden sell order after this slot is cleared.
+                  </div>
+                )}
+                {myPendingCredit > 0n && (
+                  <div className="inline-alert warning">
+                    The old slot credit is higher than the USDC currently held
+                    by the pool. ArcSlicer will withdraw the settled USDC and
+                    clear the stale remainder from this slot.
+                  </div>
+                )}
                 <div className="panel-note">
                   <IconLock /> Your remaining SOL and floor price stay encrypted
                   in the pool book until you cancel or a trade settles.
@@ -804,10 +934,10 @@ export default function DarkPool() {
                 </button>
                 <button
                   className="ghost-button"
-                  disabled={manageBusy}
+                  disabled={manageBusy || poolSoldOut}
                   onClick={() => cancelAndWithdraw(mySlot)}
                 >
-                  Cancel order and withdraw SOL
+                  {poolSoldOut ? "SOL Fully Sold" : "Cancel order and withdraw SOL"}
                 </button>
                 {manageStatus !== "idle" && (
                   <StepTracker status={manageStatus} error={manageError} />
@@ -818,7 +948,13 @@ export default function DarkPool() {
 
           <aside className="side-panel position-progress">
             <span>Seller lifecycle</span>
-            <strong>{mySlot !== null ? "Live in the pool" : "Start with a sell order"}</strong>
+            <strong>
+              {mySlot !== null
+                ? poolSoldOut
+                  ? "Sold out"
+                  : "Live in the pool"
+                : "Start with a sell order"}
+            </strong>
             <div className="progress-list">
               <div className={`progress-line ${mySlot !== null ? "done" : "waiting"}`}>
                 <IconCheck />
@@ -828,9 +964,13 @@ export default function DarkPool() {
                 <IconStatusDot />
                 <span>Private matching</span>
               </div>
-              <div className={`progress-line ${myCredit > 0n ? "done" : "waiting"}`}>
+            <div className={`progress-line ${myCredit > 0n ? "done" : "waiting"}`}>
                 <IconStatusDot />
                 <span>USDC credit available</span>
+              </div>
+              <div className={`progress-line ${poolSoldOut ? "done" : "waiting"}`}>
+                <IconStatusDot />
+                <span>Pool sold out</span>
               </div>
             </div>
             <div className="side-metric">
@@ -841,6 +981,12 @@ export default function DarkPool() {
               <small>Withdrawable credit</small>
               <code>{myCredit === 0n ? "—" : fmtCost(myCredit)}</code>
             </div>
+            {myPendingCredit > 0n && (
+              <div className="side-metric">
+                <small>Pending credit</small>
+                <code>{fmtCost(myPendingCredit)}</code>
+              </div>
+            )}
           </aside>
         </section>
         )}
@@ -850,15 +996,29 @@ export default function DarkPool() {
             <section className="history-card">
             <div className="panel-title-row">
               <div>
-                <span>Session history</span>
+                <span>Buyer history</span>
                 <h3>Private fills</h3>
               </div>
+              {purchases.length > 0 && walletKey && (
+                <button
+                  className="refresh-btn"
+                  onClick={() => {
+                    window.localStorage.removeItem(purchaseHistoryKey(walletKey));
+                    setPurchases([]);
+                  }}
+                >
+                  Clear
+                </button>
+              )}
             </div>
             {purchases.length === 0 && (
               <div className="empty-state compact-empty">
                 <IconVaultEmpty />
                 <strong>No purchases yet</strong>
-                <span>Filled orders will appear here.</span>
+                <span>
+                  Filled and no-fill buy attempts will appear here for this
+                  wallet.
+                </span>
               </div>
             )}
             {purchases.length > 0 && (

@@ -46,16 +46,25 @@ export interface PoolSnapshot {
   poolBook: PublicKey;
   poolWsolVault: PublicKey;
   poolUsdcVault: PublicKey;
+  poolSolVaultBalance: bigint;
+  poolUsdcVaultBalance: bigint;
   isInitialized: boolean;
   isMatching: boolean;
+  occupiedSlots: number;
   activeSlots: number;
   mySlot: number | null;
+  myRawCredit: bigint;
   myCredit: bigint;
+  myPendingCredit: bigint;
 }
 
 export interface PoolFillResult {
   filledAmount: bigint;
   cost: bigint;
+}
+
+export interface PoolBuyReceipt extends PoolFillResult {
+  txSig: string;
 }
 
 interface DepositParams {
@@ -72,8 +81,11 @@ interface BuyParams {
 const friendlyPoolError = (e: any) => {
   const message = e?.message ?? String(e ?? "");
   if (/user rejected|rejected/i.test(message)) return "Transaction cancelled.";
-  if (/insufficient lamports|0x1/i.test(message)) {
+  if (/insufficient lamports/i.test(message)) {
     return "This wallet needs more devnet SOL for fees. Add SOL and try again.";
+  }
+  if (/insufficient funds|0x1/i.test(message)) {
+    return "A token balance changed before settlement. Refresh the pool and try again.";
   }
   if (/PoolFull/i.test(message)) {
     return "The private pool is full. Try again after an order fills or withdraws.";
@@ -82,7 +94,13 @@ const friendlyPoolError = (e: any) => {
     return "The private pool is matching another order. Try again in a moment.";
   }
   if (/NoPoolLiquidity/i.test(message)) {
-    return "No private liquidity is available yet.";
+    return "No private liquidity is available right now. Wait for a seller to add SOL.";
+  }
+  if (/NothingToSettle/i.test(message)) {
+    return "No SOL was available at execution time. Refresh and try again after new liquidity appears.";
+  }
+  if (/SellerCreditPendingSettlement/i.test(message)) {
+    return "Seller USDC is still settling. Refresh in a moment.";
   }
   if (/blockhash|timeout|timed out/i.test(message)) {
     return "The network took too long to respond. Please try again.";
@@ -111,6 +129,17 @@ const newOffset = () =>
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const readTokenAmount = async (
+  connection: anchor.web3.Connection,
+  address: PublicKey
+) => {
+  try {
+    return (await getAccount(connection, address)).amount;
+  } catch {
+    return 0n;
+  }
+};
+
 export function usePrivatePool(
   program: anchor.Program<any> | null,
   provider: anchor.AnchorProvider | null,
@@ -123,6 +152,7 @@ export function usePrivatePool(
   const [buyError, setBuyError] = useState<string | null>(null);
   const [manageError, setManageError] = useState<string | null>(null);
   const [fillResult, setFillResult] = useState<PoolFillResult | null>(null);
+  const [lastBuyReceipt, setLastBuyReceipt] = useState<PoolBuyReceipt | null>(null);
   const [txSig, setTxSig] = useState<string | null>(null);
 
   const fetchPool = useCallback(async (): Promise<PoolSnapshot | null> => {
@@ -135,20 +165,33 @@ export function usePrivatePool(
       const owners = account.owners as PublicKey[];
       const occupied = account.occupied as boolean[];
       const myKey = provider.wallet.publicKey.toBase58();
+      const [poolSolVaultBalance, poolUsdcVaultBalance] = await Promise.all([
+        readTokenAmount(provider.connection, poolWsolVault),
+        readTokenAmount(provider.connection, poolUsdcVault),
+      ]);
+      const occupiedSlots = occupied.filter(Boolean).length;
       const mySlot = owners.findIndex(
         (owner, i) => occupied[i] && owner.toBase58() === myKey
       );
-      const credit =
+      const rawCredit =
         mySlot >= 0 ? BigInt(account.accruedUsdc[mySlot].toString()) : 0n;
+      const credit =
+        rawCredit < poolUsdcVaultBalance ? rawCredit : poolUsdcVaultBalance;
       return {
         poolBook,
         poolWsolVault,
         poolUsdcVault,
+        poolSolVaultBalance,
+        poolUsdcVaultBalance,
         isInitialized: Boolean(account.isInitialized),
         isMatching: Boolean(account.isMatching),
-        activeSlots: occupied.filter(Boolean).length,
+        occupiedSlots,
+        activeSlots:
+          poolSolVaultBalance > 0n ? occupiedSlots : 0,
         mySlot: mySlot >= 0 ? mySlot : null,
+        myRawCredit: rawCredit,
         myCredit: credit,
+        myPendingCredit: rawCredit > credit ? rawCredit - credit : 0n,
       };
     } catch {
       return null;
@@ -341,10 +384,14 @@ export function usePrivatePool(
       if (!program || !provider) return;
       setBuyError(null);
       setFillResult(null);
+      setLastBuyReceipt(null);
       try {
         setBuyStatus("encrypting");
         if (!cipher.ready) await cipher.init();
         const { poolBook, poolWsolVault, poolUsdcVault } = await ensurePool();
+        if ((await readTokenAmount(provider.connection, poolWsolVault)) === 0n) {
+          throw new Error("NoPoolLiquidity");
+        }
         const buyer = provider.wallet.publicKey;
         const buyerLamports = await provider.connection.getBalance(
           buyer,
@@ -352,6 +399,39 @@ export function usePrivatePool(
         );
         if (buyerLamports < MIN_BUYER_SOL_BALANCE) {
           throw new Error("Add devnet SOL before buying.");
+        }
+
+        const buyerUsdcAta = getAssociatedTokenAddressSync(USDC_MINT, buyer);
+        if (!(await provider.connection.getAccountInfo(buyerUsdcAta))) {
+          const tx = new Transaction().add(
+            createAssociatedTokenAccountInstruction(
+              buyer,
+              buyerUsdcAta,
+              buyer,
+              USDC_MINT
+            )
+          );
+          const { blockhash } = await provider.connection.getLatestBlockhash();
+          tx.recentBlockhash = blockhash;
+          tx.feePayer = buyer;
+          const signed = await provider.wallet.signTransaction(tx);
+          await provider.connection.sendRawTransaction(signed.serialize(), {
+            skipPreflight: false,
+          });
+        }
+
+        const maxCost =
+          (params.amountRequested * params.maxPrice) / 1_000_000_000n;
+        const buyerUsdcBeforeMatch = await getAccount(
+          provider.connection,
+          buyerUsdcAta
+        );
+        if (buyerUsdcBeforeMatch.amount < maxCost) {
+          throw new Error(
+            `Buyer USDC balance is too low. Need up to ${(
+              Number(maxCost) / 1e6
+            ).toFixed(6)} USDC.`
+          );
         }
 
         const enc = cipher.encryptU64Pair(
@@ -432,6 +512,7 @@ export function usePrivatePool(
         const result = await resultPromise;
         setFillResult(result);
         if (result.filledAmount === 0n) {
+          setLastBuyReceipt({ ...result, txSig: sig });
           setBuyStatus("done");
           return;
         }
@@ -443,7 +524,6 @@ export function usePrivatePool(
           .rpc({ commitment: "confirmed" });
 
         const buyerWsolAta = getAssociatedTokenAddressSync(NATIVE_MINT, buyer);
-        const buyerUsdcAta = getAssociatedTokenAddressSync(USDC_MINT, buyer);
         const setupTx = new Transaction();
         if (!(await provider.connection.getAccountInfo(buyerWsolAta))) {
           setupTx.add(
@@ -452,16 +532,6 @@ export function usePrivatePool(
               buyerWsolAta,
               buyer,
               NATIVE_MINT
-            )
-          );
-        }
-        if (!(await provider.connection.getAccountInfo(buyerUsdcAta))) {
-          setupTx.add(
-            createAssociatedTokenAccountInstruction(
-              buyer,
-              buyerUsdcAta,
-              buyer,
-              USDC_MINT
             )
           );
         }
@@ -485,7 +555,7 @@ export function usePrivatePool(
         }
 
         setBuyStatus("settling");
-        await program.methods
+        const settleSig = await program.methods
           .settlePoolFill()
           .accountsPartial({
             buyer,
@@ -497,6 +567,7 @@ export function usePrivatePool(
             buyerUsdcAta,
           })
           .rpc({ commitment: "confirmed" });
+        setTxSig(settleSig);
 
         const closeTx = new Transaction().add(
           createCloseAccountInstruction(buyerWsolAta, buyer, buyer)
@@ -508,6 +579,7 @@ export function usePrivatePool(
         await provider.connection.sendRawTransaction(signedClose.serialize(), {
           skipPreflight: false,
         });
+        setLastBuyReceipt({ ...result, txSig: settleSig });
         setBuyStatus("done");
       } catch (e: any) {
         setBuyError(friendlyPoolError(e));
@@ -669,6 +741,7 @@ export function usePrivatePool(
     buyError,
     manageError,
     fillResult,
+    lastBuyReceipt,
     txSig,
   };
 }

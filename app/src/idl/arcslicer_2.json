@@ -2863,6 +2863,11 @@
       "code": 6022,
       "name": "CancelNotReady",
       "msg": "The private cancellation is not ready yet"
+    },
+    {
+      "code": 6023,
+      "name": "SellerCreditPendingSettlement",
+      "msg": "Seller USDC is still waiting for buyer settlement"
     }
   ],
   "types": [

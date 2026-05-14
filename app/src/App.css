@@ -1108,6 +1108,7 @@ svg {
   border: 1px solid var(--color-border);
   border-radius: 6px;
   background: var(--color-surface);
+  overflow: hidden;
 }
 
 .buy-panel,
@@ -1445,6 +1446,10 @@ svg {
   font-size: 28px;
 }
 
+.manage-row.warning-row strong {
+  color: var(--color-warning);
+}
+
 .manage-fill {
   margin-top: 32px;
 }
@@ -1483,6 +1488,17 @@ svg {
 
 .tx-link {
   margin-top: 20px;
+}
+
+.receipt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.receipt-actions .tx-link {
+  margin-top: 0;
 }
 
 .app-footer {
@@ -1657,15 +1673,15 @@ svg {
   }
 
   .private-hero {
-    padding: 18px 16px 20px;
+    padding: 18px 24px 20px;
     width: 100vw;
     max-width: 100vw;
     overflow: hidden;
   }
 
   .hero-topline {
-    width: calc(100vw - 32px);
-    max-width: calc(100vw - 32px);
+    width: calc(100vw - 48px);
+    max-width: calc(100vw - 48px);
     grid-template-columns: 1fr;
     justify-items: center;
     gap: 14px;
@@ -1862,7 +1878,7 @@ svg {
     width: 100%;
     max-width: 100vw;
     overflow: hidden;
-    padding: 20px 16px;
+    padding: 20px 24px;
   }
 
   .view-grid,
@@ -1890,6 +1906,7 @@ svg {
   }
 
   .panel-title-row h3 {
+    width: min(100%, 276px);
     max-width: 276px;
     font-size: 24px;
     line-height: 1.12;
@@ -1898,12 +1915,23 @@ svg {
 
   .panel-note span,
   .inline-alert {
+    width: min(100%, 276px);
     max-width: 276px;
   }
 
   .panel-title-row .refresh-btn {
     width: 100%;
     justify-self: stretch;
+  }
+
+  .receipt-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .receipt-actions .ghost-button,
+  .receipt-actions .tx-link {
+    width: 100%;
   }
 
   .vault-rows {

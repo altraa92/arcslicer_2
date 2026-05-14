@@ -135,10 +135,15 @@ pub mod arcslicer_2 {
         pubkey: [u8; 32],
         nonce: u128,
     ) -> Result<()> {
-        require!(!ctx.accounts.pool_book.is_initialized, ErrorCode::PoolAlreadyInitialized);
+        require!(
+            !ctx.accounts.pool_book.is_initialized,
+            ErrorCode::PoolAlreadyInitialized
+        );
 
         ctx.accounts.sign_pda_account.bump = ctx.bumps.sign_pda_account;
-        let mut args = ArgBuilder::new().x25519_pubkey(pubkey).plaintext_u128(nonce);
+        let mut args = ArgBuilder::new()
+            .x25519_pubkey(pubkey)
+            .plaintext_u128(nonce);
         for ciphertext in book_ciphertexts {
             args = args.encrypted_u64(ciphertext);
         }
@@ -175,7 +180,8 @@ pub mod arcslicer_2 {
             Err(_) => return Err(ErrorCode::AbortedComputation.into()),
         };
         let pool = &mut ctx.accounts.pool_book;
-        pool.encrypted_book.copy_from_slice(&o.ciphertexts[..POOL_BOOK_CIPHERTEXTS]);
+        pool.encrypted_book
+            .copy_from_slice(&o.ciphertexts[..POOL_BOOK_CIPHERTEXTS]);
         pool.book_nonce = o.nonce;
         pool.is_initialized = true;
         Ok(())
@@ -191,7 +197,10 @@ pub mod arcslicer_2 {
         deposit_amount: u64,
         urgency_level: u8,
     ) -> Result<()> {
-        require!(ctx.accounts.pool_book.is_initialized, ErrorCode::PoolNotReady);
+        require!(
+            ctx.accounts.pool_book.is_initialized,
+            ErrorCode::PoolNotReady
+        );
         require!(!ctx.accounts.pool_book.is_matching, ErrorCode::PoolBusy);
 
         let slot = ctx
@@ -221,8 +230,7 @@ pub mod arcslicer_2 {
         ticket.bump = ctx.bumps.deposit_ticket;
 
         ctx.accounts.sign_pda_account.bump = ctx.bumps.sign_pda_account;
-        let mut args = ArgBuilder::new()
-            .plaintext_u128(ctx.accounts.pool_book.book_nonce);
+        let mut args = ArgBuilder::new().plaintext_u128(ctx.accounts.pool_book.book_nonce);
         for ciphertext in ctx.accounts.pool_book.encrypted_book {
             args = args.encrypted_u64(ciphertext);
         }
@@ -288,7 +296,8 @@ pub mod arcslicer_2 {
         require!(slot < POOL_SLOT_COUNT, ErrorCode::InvalidPoolSlot);
         require!(!pool.occupied[slot], ErrorCode::PoolSlotOccupied);
 
-        pool.encrypted_book.copy_from_slice(&o.ciphertexts[..POOL_BOOK_CIPHERTEXTS]);
+        pool.encrypted_book
+            .copy_from_slice(&o.ciphertexts[..POOL_BOOK_CIPHERTEXTS]);
         pool.book_nonce = o.nonce;
         pool.owners[slot] = ticket.owner;
         pool.occupied[slot] = true;
@@ -311,7 +320,10 @@ pub mod arcslicer_2 {
         let pool = &mut ctx.accounts.pool_book;
         require!(pool.is_initialized, ErrorCode::PoolNotReady);
         require!(!pool.is_matching, ErrorCode::PoolBusy);
-        require!(pool.occupied.iter().any(|occupied| *occupied), ErrorCode::NoPoolLiquidity);
+        require!(
+            pool.occupied.iter().any(|occupied| *occupied),
+            ErrorCode::NoPoolLiquidity
+        );
 
         pool.is_matching = true;
 
@@ -399,16 +411,12 @@ pub mod arcslicer_2 {
         let updated_book = &result.field_11;
 
         let pool = &mut ctx.accounts.pool_book;
-        pool.encrypted_book.copy_from_slice(&updated_book.ciphertexts[..POOL_BOOK_CIPHERTEXTS]);
+        pool.encrypted_book
+            .copy_from_slice(&updated_book.ciphertexts[..POOL_BOOK_CIPHERTEXTS]);
         pool.book_nonce = updated_book.nonce;
         pool.is_matching = false;
 
         let slot_costs = [cost0, cost1, cost2, cost3];
-        for i in 0..POOL_SLOT_COUNT {
-            pool.accrued_usdc[i] = pool.accrued_usdc[i]
-                .checked_add(slot_costs[i])
-                .ok_or(ErrorCode::MathOverflow)?;
-        }
 
         let fill = &mut ctx.accounts.pool_fill;
         fill.total_filled_lamports = total_filled;
@@ -481,6 +489,12 @@ pub mod arcslicer_2 {
             fill.total_cost_usdc,
         )?;
 
+        for i in 0..POOL_SLOT_COUNT {
+            ctx.accounts.pool_book.accrued_usdc[i] = ctx.accounts.pool_book.accrued_usdc[i]
+                .checked_add(fill.slot_costs[i])
+                .ok_or(ErrorCode::MathOverflow)?;
+        }
+
         fill.is_settled = true;
         emit!(PoolSettled {
             pool: ctx.accounts.pool_book.key(),
@@ -503,8 +517,11 @@ pub mod arcslicer_2 {
             ErrorCode::UnauthorizedPoolSlot
         );
 
-        let amount = ctx.accounts.pool_book.accrued_usdc[slot_idx];
-        require!(amount > 0, ErrorCode::NothingToWithdraw);
+        let credited = ctx.accounts.pool_book.accrued_usdc[slot_idx];
+        require!(credited > 0, ErrorCode::NothingToWithdraw);
+
+        let amount = credited.min(ctx.accounts.pool_usdc_vault.amount);
+        require!(amount > 0, ErrorCode::SellerCreditPendingSettlement);
         ctx.accounts.pool_book.accrued_usdc[slot_idx] = 0;
 
         let pool_key = ctx.accounts.pool_book.key();
@@ -536,13 +553,19 @@ pub mod arcslicer_2 {
     ) -> Result<()> {
         let slot_idx = slot as usize;
         require!(slot_idx < POOL_SLOT_COUNT, ErrorCode::InvalidPoolSlot);
-        require!(ctx.accounts.pool_book.is_initialized, ErrorCode::PoolNotReady);
+        require!(
+            ctx.accounts.pool_book.is_initialized,
+            ErrorCode::PoolNotReady
+        );
         require!(!ctx.accounts.pool_book.is_matching, ErrorCode::PoolBusy);
         require!(
             ctx.accounts.pool_book.owners[slot_idx] == ctx.accounts.owner.key(),
             ErrorCode::UnauthorizedPoolSlot
         );
-        require!(ctx.accounts.pool_book.occupied[slot_idx], ErrorCode::PoolSlotEmpty);
+        require!(
+            ctx.accounts.pool_book.occupied[slot_idx],
+            ErrorCode::PoolSlotEmpty
+        );
 
         let ticket = &mut ctx.accounts.cancel_ticket;
         ticket.pool = ctx.accounts.pool_book.key();
@@ -610,7 +633,8 @@ pub mod arcslicer_2 {
         require!(slot_idx < POOL_SLOT_COUNT, ErrorCode::InvalidPoolSlot);
 
         let pool = &mut ctx.accounts.pool_book;
-        pool.encrypted_book.copy_from_slice(&updated_book.ciphertexts[..POOL_BOOK_CIPHERTEXTS]);
+        pool.encrypted_book
+            .copy_from_slice(&updated_book.ciphertexts[..POOL_BOOK_CIPHERTEXTS]);
         pool.book_nonce = updated_book.nonce;
         pool.occupied[slot_idx] = false;
         pool.owners[slot_idx] = Pubkey::default();
@@ -623,8 +647,14 @@ pub mod arcslicer_2 {
     }
 
     pub fn withdraw_cancelled_pool_order(ctx: Context<WithdrawCancelledPoolOrder>) -> Result<()> {
-        require!(ctx.accounts.cancel_ticket.is_ready, ErrorCode::CancelNotReady);
-        require!(!ctx.accounts.cancel_ticket.is_withdrawn, ErrorCode::AlreadyWithdrawn);
+        require!(
+            ctx.accounts.cancel_ticket.is_ready,
+            ErrorCode::CancelNotReady
+        );
+        require!(
+            !ctx.accounts.cancel_ticket.is_withdrawn,
+            ErrorCode::AlreadyWithdrawn
+        );
 
         let amount = ctx.accounts.cancel_ticket.remaining_lamports;
         require!(amount > 0, ErrorCode::NothingToWithdraw);
@@ -1853,4 +1883,6 @@ pub enum ErrorCode {
     MathOverflow,
     #[msg("The private cancellation is not ready yet")]
     CancelNotReady,
+    #[msg("Seller USDC is still waiting for buyer settlement")]
+    SellerCreditPendingSettlement,
 }
