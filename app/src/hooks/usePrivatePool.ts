@@ -1,0 +1,674 @@
+import { useCallback, useState } from "react";
+import * as anchor from "@coral-xyz/anchor";
+import {
+  LAMPORTS_PER_SOL,
+  PublicKey,
+  SystemProgram,
+  Transaction,
+} from "@solana/web3.js";
+import {
+  createAssociatedTokenAccountInstruction,
+  createCloseAccountInstruction,
+  createSyncNativeInstruction,
+  getAccount,
+  getAssociatedTokenAddressSync,
+  NATIVE_MINT,
+} from "@solana/spl-token";
+import {
+  awaitComputationFinalization,
+  getClusterAccAddress,
+  getCompDefAccAddress,
+  getComputationAccAddress,
+  getExecutingPoolAccAddress,
+  getMXEAccAddress,
+  getMempoolAccAddress,
+} from "@arcium-hq/client";
+import { type ArciumCipher } from "./useArciumCipher";
+import { compDefOffset, randomBytes, USDC_MINT, WSOL_MINT } from "../config/constants";
+
+const CLUSTER_OFFSET = 456;
+const POOL_BOOK_VALUES = 8;
+const MIN_BUYER_SOL_BALANCE = 0.01 * LAMPORTS_PER_SOL;
+const SLOT_CONFIRM_RETRIES = 12;
+const SLOT_CONFIRM_DELAY_MS = 1500;
+
+export type PoolStatus =
+  | "idle"
+  | "encrypting"
+  | "sending"
+  | "waiting"
+  | "finalizing"
+  | "settling"
+  | "done"
+  | "error";
+
+export interface PoolSnapshot {
+  poolBook: PublicKey;
+  poolWsolVault: PublicKey;
+  poolUsdcVault: PublicKey;
+  isInitialized: boolean;
+  isMatching: boolean;
+  activeSlots: number;
+  mySlot: number | null;
+  myCredit: bigint;
+}
+
+export interface PoolFillResult {
+  filledAmount: bigint;
+  cost: bigint;
+}
+
+interface DepositParams {
+  depositLamports: bigint;
+  pricePerToken: bigint;
+  urgencyLevel: 1 | 2 | 3;
+}
+
+interface BuyParams {
+  amountRequested: bigint;
+  maxPrice: bigint;
+}
+
+const friendlyPoolError = (e: any) => {
+  const message = e?.message ?? String(e ?? "");
+  if (/user rejected|rejected/i.test(message)) return "Transaction cancelled.";
+  if (/insufficient lamports|0x1/i.test(message)) {
+    return "This wallet needs more devnet SOL for fees. Add SOL and try again.";
+  }
+  if (/PoolFull/i.test(message)) {
+    return "The private pool is full. Try again after an order fills or withdraws.";
+  }
+  if (/PoolBusy/i.test(message)) {
+    return "The private pool is matching another order. Try again in a moment.";
+  }
+  if (/NoPoolLiquidity/i.test(message)) {
+    return "No private liquidity is available yet.";
+  }
+  if (/blockhash|timeout|timed out/i.test(message)) {
+    return "The network took too long to respond. Please try again.";
+  }
+  return message || "Private pool action failed. Please try again.";
+};
+
+const getPoolAddresses = (programId: PublicKey) => {
+  const [poolBook] = PublicKey.findProgramAddressSync(
+    [Buffer.from("pool_book")],
+    programId
+  );
+  const [poolWsolVault] = PublicKey.findProgramAddressSync(
+    [Buffer.from("pool_wsol_vault"), poolBook.toBuffer()],
+    programId
+  );
+  const [poolUsdcVault] = PublicKey.findProgramAddressSync(
+    [Buffer.from("pool_usdc_vault"), poolBook.toBuffer()],
+    programId
+  );
+  return { poolBook, poolWsolVault, poolUsdcVault };
+};
+
+const newOffset = () =>
+  new anchor.BN(Buffer.from(randomBytes(8)).readBigUInt64LE(0).toString());
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export function usePrivatePool(
+  program: anchor.Program<any> | null,
+  provider: anchor.AnchorProvider | null,
+  cipher: ArciumCipher
+) {
+  const [depositStatus, setDepositStatus] = useState<PoolStatus>("idle");
+  const [buyStatus, setBuyStatus] = useState<PoolStatus>("idle");
+  const [manageStatus, setManageStatus] = useState<PoolStatus>("idle");
+  const [depositError, setDepositError] = useState<string | null>(null);
+  const [buyError, setBuyError] = useState<string | null>(null);
+  const [manageError, setManageError] = useState<string | null>(null);
+  const [fillResult, setFillResult] = useState<PoolFillResult | null>(null);
+  const [txSig, setTxSig] = useState<string | null>(null);
+
+  const fetchPool = useCallback(async (): Promise<PoolSnapshot | null> => {
+    if (!program || !provider) return null;
+    const { poolBook, poolWsolVault, poolUsdcVault } = getPoolAddresses(
+      program.programId
+    );
+    try {
+      const account = await (program.account as any).poolBook.fetch(poolBook);
+      const owners = account.owners as PublicKey[];
+      const occupied = account.occupied as boolean[];
+      const myKey = provider.wallet.publicKey.toBase58();
+      const mySlot = owners.findIndex(
+        (owner, i) => occupied[i] && owner.toBase58() === myKey
+      );
+      const credit =
+        mySlot >= 0 ? BigInt(account.accruedUsdc[mySlot].toString()) : 0n;
+      return {
+        poolBook,
+        poolWsolVault,
+        poolUsdcVault,
+        isInitialized: Boolean(account.isInitialized),
+        isMatching: Boolean(account.isMatching),
+        activeSlots: occupied.filter(Boolean).length,
+        mySlot: mySlot >= 0 ? mySlot : null,
+        myCredit: credit,
+      };
+    } catch {
+      return null;
+    }
+  }, [program, provider]);
+
+  const ensurePool = useCallback(async () => {
+    if (!program || !provider) throw new Error("Connect wallet first.");
+    const { poolBook, poolWsolVault, poolUsdcVault } = getPoolAddresses(
+      program.programId
+    );
+    const authority = provider.wallet.publicKey;
+    const existing = await fetchPool();
+
+    if (!existing) {
+      await program.methods
+        .initializePool()
+        .accountsPartial({
+          authority,
+          poolBook,
+          solMint: WSOL_MINT,
+          usdcMint: USDC_MINT,
+          poolWsolVault,
+          poolUsdcVault,
+        })
+        .rpc({ commitment: "confirmed" });
+    }
+
+    const pool = (await fetchPool()) ?? {
+      isInitialized: false,
+      poolBook,
+      poolWsolVault,
+      poolUsdcVault,
+    };
+    if (pool.isInitialized) return { poolBook, poolWsolVault, poolUsdcVault };
+
+    if (!cipher.ready) await cipher.init();
+    const enc = cipher.encryptU64Array(Array(POOL_BOOK_VALUES).fill(0n));
+    const computationOffset = newOffset();
+    await program.methods
+      .initPoolBook(
+        computationOffset,
+        enc.ciphertexts,
+        enc.pubKey,
+        enc.nonce
+      )
+      .accountsPartial({
+        authority,
+        poolBook,
+        mxeAccount: getMXEAccAddress(program.programId),
+        mempoolAccount: getMempoolAccAddress(CLUSTER_OFFSET),
+        executingPool: getExecutingPoolAccAddress(CLUSTER_OFFSET),
+        computationAccount: getComputationAccAddress(
+          CLUSTER_OFFSET,
+          computationOffset
+        ),
+        compDefAccount: getCompDefAccAddress(
+          program.programId,
+          compDefOffset("init_pool_book")
+        ),
+        clusterAccount: getClusterAccAddress(CLUSTER_OFFSET),
+      })
+      .rpc({ commitment: "confirmed" });
+    await awaitComputationFinalization(
+      provider,
+      computationOffset,
+      program.programId,
+      "confirmed"
+    );
+    return { poolBook, poolWsolVault, poolUsdcVault };
+  }, [program, provider, cipher, fetchPool]);
+
+  const waitForOwnedSlot = useCallback(async () => {
+    for (let attempt = 0; attempt < SLOT_CONFIRM_RETRIES; attempt++) {
+      const snapshot = await fetchPool();
+      if (snapshot?.mySlot !== null && snapshot?.mySlot !== undefined) {
+        return snapshot;
+      }
+      await sleep(SLOT_CONFIRM_DELAY_MS);
+    }
+    throw new Error(
+      "Your deposit transaction completed, but the private pool slot was not confirmed. Refresh in a moment; if it stays missing, the Arcium callback did not complete."
+    );
+  }, [fetchPool]);
+
+  const deposit = useCallback(
+    async (params: DepositParams) => {
+      if (!program || !provider) return;
+      setDepositError(null);
+      try {
+        setDepositStatus("encrypting");
+        if (!cipher.ready) await cipher.init();
+        const { poolBook, poolWsolVault } = await ensurePool();
+        const owner = provider.wallet.publicKey;
+        const wsolAta = getAssociatedTokenAddressSync(WSOL_MINT, owner);
+
+        const setupTx = new Transaction();
+        const wsolInfo = await provider.connection.getAccountInfo(wsolAta);
+        if (!wsolInfo) {
+          setupTx.add(
+            createAssociatedTokenAccountInstruction(
+              owner,
+              wsolAta,
+              owner,
+              WSOL_MINT
+            )
+          );
+        }
+        setupTx.add(
+          SystemProgram.transfer({
+            fromPubkey: owner,
+            toPubkey: wsolAta,
+            lamports: Number(params.depositLamports),
+          }),
+          createSyncNativeInstruction(wsolAta)
+        );
+        const { blockhash } = await provider.connection.getLatestBlockhash();
+        setupTx.recentBlockhash = blockhash;
+        setupTx.feePayer = owner;
+        const signedSetup = await provider.wallet.signTransaction(setupTx);
+        await provider.connection.sendRawTransaction(signedSetup.serialize(), {
+          skipPreflight: false,
+        });
+
+        const enc = cipher.encryptU64Pair(
+          params.depositLamports,
+          params.pricePerToken
+        );
+        const computationOffset = newOffset();
+        const [depositTicket] = PublicKey.findProgramAddressSync(
+          [
+            Buffer.from("pool_deposit"),
+            owner.toBuffer(),
+            computationOffset.toArrayLike(Buffer, "le", 8),
+          ],
+          program.programId
+        );
+
+        setDepositStatus("sending");
+        const sig = await program.methods
+          .depositPoolOrder(
+            computationOffset,
+            enc.ciphertext0,
+            enc.ciphertext1,
+            enc.pubKey,
+            enc.nonce,
+            new anchor.BN(params.depositLamports.toString()),
+            params.urgencyLevel
+          )
+          .accountsPartial({
+            owner,
+            poolBook,
+            poolWsolVault,
+            depositorTokenAccount: wsolAta,
+            depositTicket,
+            mxeAccount: getMXEAccAddress(program.programId),
+            mempoolAccount: getMempoolAccAddress(CLUSTER_OFFSET),
+            executingPool: getExecutingPoolAccAddress(CLUSTER_OFFSET),
+            computationAccount: getComputationAccAddress(
+              CLUSTER_OFFSET,
+              computationOffset
+            ),
+            compDefAccount: getCompDefAccAddress(
+              program.programId,
+              compDefOffset("add_pool_order")
+            ),
+            clusterAccount: getClusterAccAddress(CLUSTER_OFFSET),
+          })
+          .rpc({ commitment: "confirmed" });
+        setTxSig(sig);
+        setDepositStatus("waiting");
+        await awaitComputationFinalization(
+          provider,
+          computationOffset,
+          program.programId,
+          "confirmed"
+        );
+        await waitForOwnedSlot();
+        setDepositStatus("done");
+      } catch (e: any) {
+        setDepositError(friendlyPoolError(e));
+        setDepositStatus("error");
+      }
+    },
+    [program, provider, cipher, ensurePool, waitForOwnedSlot]
+  );
+
+  const buy = useCallback(
+    async (params: BuyParams) => {
+      if (!program || !provider) return;
+      setBuyError(null);
+      setFillResult(null);
+      try {
+        setBuyStatus("encrypting");
+        if (!cipher.ready) await cipher.init();
+        const { poolBook, poolWsolVault, poolUsdcVault } = await ensurePool();
+        const buyer = provider.wallet.publicKey;
+        const buyerLamports = await provider.connection.getBalance(
+          buyer,
+          "confirmed"
+        );
+        if (buyerLamports < MIN_BUYER_SOL_BALANCE) {
+          throw new Error("Add devnet SOL before buying.");
+        }
+
+        const enc = cipher.encryptU64Pair(
+          params.amountRequested,
+          params.maxPrice
+        );
+        const computationOffset = newOffset();
+        const [poolFill] = PublicKey.findProgramAddressSync(
+          [
+            Buffer.from("pool_fill"),
+            poolBook.toBuffer(),
+            buyer.toBuffer(),
+            computationOffset.toArrayLike(Buffer, "le", 8),
+          ],
+          program.programId
+        );
+
+        const resultPromise = new Promise<PoolFillResult>((resolve, reject) => {
+          const listener = program.addEventListener(
+            "poolMatchResultEvent",
+            (event: any) => {
+              if (event.fill.toBase58() !== poolFill.toBase58()) return;
+              program.removeEventListener(listener);
+              try {
+                const [filledAmount, cost] = cipher.decryptU64Pair(
+                  Array.from(event.filledAmountCiphertext) as number[],
+                  Array.from(event.costCiphertext) as number[],
+                  Array.from(event.resultNonce) as number[]
+                );
+                resolve({ filledAmount, cost });
+              } catch (error) {
+                reject(error);
+              }
+            }
+          );
+          setTimeout(
+            () => reject(new Error("The private match is taking longer than expected.")),
+            120_000
+          );
+        });
+
+        setBuyStatus("sending");
+        const sig = await program.methods
+          .securePoolBuyRequest(
+            computationOffset,
+            enc.ciphertext0,
+            enc.ciphertext1,
+            enc.pubKey,
+            enc.nonce
+          )
+          .accountsPartial({
+            buyer,
+            poolBook,
+            poolFill,
+            mxeAccount: getMXEAccAddress(program.programId),
+            mempoolAccount: getMempoolAccAddress(CLUSTER_OFFSET),
+            executingPool: getExecutingPoolAccAddress(CLUSTER_OFFSET),
+            computationAccount: getComputationAccAddress(
+              CLUSTER_OFFSET,
+              computationOffset
+            ),
+            compDefAccount: getCompDefAccAddress(
+              program.programId,
+              compDefOffset("match_pool_v2")
+            ),
+            clusterAccount: getClusterAccAddress(CLUSTER_OFFSET),
+          })
+          .rpc({ commitment: "confirmed" });
+        setTxSig(sig);
+        setBuyStatus("waiting");
+        await awaitComputationFinalization(
+          provider,
+          computationOffset,
+          program.programId,
+          "confirmed"
+        );
+
+        const result = await resultPromise;
+        setFillResult(result);
+        if (result.filledAmount === 0n) {
+          setBuyStatus("done");
+          return;
+        }
+
+        setBuyStatus("finalizing");
+        await program.methods
+          .finalizePoolFill()
+          .accountsPartial({ buyer, poolFill })
+          .rpc({ commitment: "confirmed" });
+
+        const buyerWsolAta = getAssociatedTokenAddressSync(NATIVE_MINT, buyer);
+        const buyerUsdcAta = getAssociatedTokenAddressSync(USDC_MINT, buyer);
+        const setupTx = new Transaction();
+        if (!(await provider.connection.getAccountInfo(buyerWsolAta))) {
+          setupTx.add(
+            createAssociatedTokenAccountInstruction(
+              buyer,
+              buyerWsolAta,
+              buyer,
+              NATIVE_MINT
+            )
+          );
+        }
+        if (!(await provider.connection.getAccountInfo(buyerUsdcAta))) {
+          setupTx.add(
+            createAssociatedTokenAccountInstruction(
+              buyer,
+              buyerUsdcAta,
+              buyer,
+              USDC_MINT
+            )
+          );
+        }
+        if (setupTx.instructions.length > 0) {
+          const { blockhash } = await provider.connection.getLatestBlockhash();
+          setupTx.recentBlockhash = blockhash;
+          setupTx.feePayer = buyer;
+          const signed = await provider.wallet.signTransaction(setupTx);
+          await provider.connection.sendRawTransaction(signed.serialize(), {
+            skipPreflight: false,
+          });
+        }
+
+        const buyerUsdc = await getAccount(provider.connection, buyerUsdcAta);
+        if (buyerUsdc.amount < result.cost) {
+          throw new Error(
+            `Buyer USDC balance is too low. Need ${(
+              Number(result.cost) / 1e6
+            ).toFixed(6)} USDC.`
+          );
+        }
+
+        setBuyStatus("settling");
+        await program.methods
+          .settlePoolFill()
+          .accountsPartial({
+            buyer,
+            poolBook,
+            poolFill,
+            poolWsolVault,
+            poolUsdcVault,
+            buyerWsolAta,
+            buyerUsdcAta,
+          })
+          .rpc({ commitment: "confirmed" });
+
+        const closeTx = new Transaction().add(
+          createCloseAccountInstruction(buyerWsolAta, buyer, buyer)
+        );
+        const { blockhash } = await provider.connection.getLatestBlockhash();
+        closeTx.recentBlockhash = blockhash;
+        closeTx.feePayer = buyer;
+        const signedClose = await provider.wallet.signTransaction(closeTx);
+        await provider.connection.sendRawTransaction(signedClose.serialize(), {
+          skipPreflight: false,
+        });
+        setBuyStatus("done");
+      } catch (e: any) {
+        setBuyError(friendlyPoolError(e));
+        setBuyStatus("error");
+      }
+    },
+    [program, provider, cipher, ensurePool]
+  );
+
+  const withdrawCredit = useCallback(
+    async (slot: number) => {
+      if (!program || !provider) return;
+      setManageError(null);
+      try {
+        setManageStatus("sending");
+        const { poolBook, poolUsdcVault } = await ensurePool();
+        const owner = provider.wallet.publicKey;
+        const ownerUsdcAta = getAssociatedTokenAddressSync(USDC_MINT, owner);
+        if (!(await provider.connection.getAccountInfo(ownerUsdcAta))) {
+          const tx = new Transaction().add(
+            createAssociatedTokenAccountInstruction(
+              owner,
+              ownerUsdcAta,
+              owner,
+              USDC_MINT
+            )
+          );
+          const { blockhash } = await provider.connection.getLatestBlockhash();
+          tx.recentBlockhash = blockhash;
+          tx.feePayer = owner;
+          const signed = await provider.wallet.signTransaction(tx);
+          await provider.connection.sendRawTransaction(signed.serialize(), {
+            skipPreflight: false,
+          });
+        }
+        await program.methods
+          .withdrawPoolSellerCredit(slot)
+          .accountsPartial({
+            owner,
+            poolBook,
+            poolUsdcVault,
+            ownerUsdcAta,
+          })
+          .rpc({ commitment: "confirmed" });
+        setManageStatus("done");
+      } catch (e: any) {
+        setManageError(friendlyPoolError(e));
+        setManageStatus("error");
+      }
+    },
+    [program, provider, ensurePool]
+  );
+
+  const cancelAndWithdraw = useCallback(
+    async (slot: number) => {
+      if (!program || !provider) return;
+      setManageError(null);
+      try {
+        setManageStatus("sending");
+        const { poolBook, poolWsolVault } = await ensurePool();
+        const owner = provider.wallet.publicKey;
+        const computationOffset = newOffset();
+        const [cancelTicket] = PublicKey.findProgramAddressSync(
+          [
+            Buffer.from("pool_cancel"),
+            owner.toBuffer(),
+            computationOffset.toArrayLike(Buffer, "le", 8),
+          ],
+          program.programId
+        );
+        await program.methods
+          .requestCancelPoolOrder(computationOffset, slot)
+          .accountsPartial({
+            owner,
+            poolBook,
+            cancelTicket,
+            mxeAccount: getMXEAccAddress(program.programId),
+            mempoolAccount: getMempoolAccAddress(CLUSTER_OFFSET),
+            executingPool: getExecutingPoolAccAddress(CLUSTER_OFFSET),
+            computationAccount: getComputationAccAddress(
+              CLUSTER_OFFSET,
+              computationOffset
+            ),
+            compDefAccount: getCompDefAccAddress(
+              program.programId,
+              compDefOffset("cancel_pool_order")
+            ),
+            clusterAccount: getClusterAccAddress(CLUSTER_OFFSET),
+          })
+          .rpc({ commitment: "confirmed" });
+        setManageStatus("waiting");
+        await awaitComputationFinalization(
+          provider,
+          computationOffset,
+          program.programId,
+          "confirmed"
+        );
+
+        const ownerTokenAccount = getAssociatedTokenAddressSync(WSOL_MINT, owner);
+        if (!(await provider.connection.getAccountInfo(ownerTokenAccount))) {
+          const tx = new Transaction().add(
+            createAssociatedTokenAccountInstruction(
+              owner,
+              ownerTokenAccount,
+              owner,
+              WSOL_MINT
+            )
+          );
+          const { blockhash } = await provider.connection.getLatestBlockhash();
+          tx.recentBlockhash = blockhash;
+          tx.feePayer = owner;
+          const signed = await provider.wallet.signTransaction(tx);
+          await provider.connection.sendRawTransaction(signed.serialize(), {
+            skipPreflight: false,
+          });
+        }
+
+        await program.methods
+          .withdrawCancelledPoolOrder()
+          .accountsPartial({
+            owner,
+            poolBook,
+            poolWsolVault,
+            cancelTicket,
+            ownerTokenAccount,
+          })
+          .rpc({ commitment: "confirmed" });
+
+        const closeTx = new Transaction().add(
+          createCloseAccountInstruction(ownerTokenAccount, owner, owner)
+        );
+        const { blockhash } = await provider.connection.getLatestBlockhash();
+        closeTx.recentBlockhash = blockhash;
+        closeTx.feePayer = owner;
+        const signedClose = await provider.wallet.signTransaction(closeTx);
+        await provider.connection.sendRawTransaction(signedClose.serialize(), {
+          skipPreflight: false,
+        });
+        setManageStatus("done");
+      } catch (e: any) {
+        setManageError(friendlyPoolError(e));
+        setManageStatus("error");
+      }
+    },
+    [program, provider, ensurePool]
+  );
+
+  return {
+    fetchPool,
+    ensurePool,
+    deposit,
+    buy,
+    withdrawCredit,
+    cancelAndWithdraw,
+    depositStatus,
+    buyStatus,
+    manageStatus,
+    depositError,
+    buyError,
+    manageError,
+    fillResult,
+    txSig,
+  };
+}

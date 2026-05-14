@@ -9,6 +9,10 @@ declare_id!("8N8DZqLjpjmVey83Cy2BNKysBcBYvm9XHxpa7dyRsK9G");
 const COMP_DEF_OFFSET_INIT_VAULT: u32 = comp_def_offset("init_vault_balance");
 const COMP_DEF_OFFSET_MATCH_SLICE: u32 = comp_def_offset("match_slice_v2");
 const COMP_DEF_OFFSET_REVEAL_FILL: u32 = comp_def_offset("reveal_fill");
+const COMP_DEF_OFFSET_INIT_POOL_BOOK: u32 = comp_def_offset("init_pool_book");
+const COMP_DEF_OFFSET_ADD_POOL_ORDER: u32 = comp_def_offset("add_pool_order");
+const COMP_DEF_OFFSET_MATCH_POOL_V2: u32 = comp_def_offset("match_pool_v2");
+const COMP_DEF_OFFSET_CANCEL_POOL_ORDER: u32 = comp_def_offset("cancel_pool_order");
 
 const SUPABASE_BASE: &str =
     "https://sszoguizxkwwfjihhrpx.supabase.co/storage/v1/object/public/circuits";
@@ -52,6 +56,598 @@ pub mod arcslicer_2 {
                 hash: circuit_hash!("reveal_fill"),
             })),
             None,
+        )?;
+        Ok(())
+    }
+
+    pub fn init_pool_book_comp_def(ctx: Context<InitPoolBookCompDef>) -> Result<()> {
+        init_comp_def(
+            ctx.accounts,
+            Some(CircuitSource::OffChain(OffChainCircuitSource {
+                source: format!("{}/init_pool_book.arcis", SUPABASE_BASE),
+                hash: circuit_hash!("init_pool_book"),
+            })),
+            None,
+        )?;
+        Ok(())
+    }
+
+    pub fn init_add_pool_order_comp_def(ctx: Context<InitAddPoolOrderCompDef>) -> Result<()> {
+        init_comp_def(
+            ctx.accounts,
+            Some(CircuitSource::OffChain(OffChainCircuitSource {
+                source: format!("{}/add_pool_order.arcis", SUPABASE_BASE),
+                hash: circuit_hash!("add_pool_order"),
+            })),
+            None,
+        )?;
+        Ok(())
+    }
+
+    pub fn init_match_pool_v2_comp_def(ctx: Context<InitMatchPoolV2CompDef>) -> Result<()> {
+        init_comp_def(
+            ctx.accounts,
+            Some(CircuitSource::OffChain(OffChainCircuitSource {
+                source: format!("{}/match_pool_v2.arcis", SUPABASE_BASE),
+                hash: circuit_hash!("match_pool_v2"),
+            })),
+            None,
+        )?;
+        Ok(())
+    }
+
+    pub fn init_cancel_pool_order_comp_def(ctx: Context<InitCancelPoolOrderCompDef>) -> Result<()> {
+        init_comp_def(
+            ctx.accounts,
+            Some(CircuitSource::OffChain(OffChainCircuitSource {
+                source: format!("{}/cancel_pool_order.arcis", SUPABASE_BASE),
+                hash: circuit_hash!("cancel_pool_order"),
+            })),
+            None,
+        )?;
+        Ok(())
+    }
+
+    pub fn initialize_pool(ctx: Context<InitializePool>) -> Result<()> {
+        let pool = &mut ctx.accounts.pool_book;
+        pool.authority = ctx.accounts.authority.key();
+        pool.sol_mint = ctx.accounts.sol_mint.key();
+        pool.usdc_mint = ctx.accounts.usdc_mint.key();
+        pool.wsol_vault = ctx.accounts.pool_wsol_vault.key();
+        pool.usdc_vault = ctx.accounts.pool_usdc_vault.key();
+        pool.owners = [Pubkey::default(); POOL_SLOT_COUNT];
+        pool.occupied = [false; POOL_SLOT_COUNT];
+        pool.accrued_usdc = [0u64; POOL_SLOT_COUNT];
+        pool.encrypted_book = [[0u8; 32]; POOL_BOOK_CIPHERTEXTS];
+        pool.book_nonce = 0;
+        pool.is_initialized = false;
+        pool.is_matching = false;
+        pool.bump = ctx.bumps.pool_book;
+        pool.wsol_vault_bump = ctx.bumps.pool_wsol_vault;
+        pool.usdc_vault_bump = ctx.bumps.pool_usdc_vault;
+        Ok(())
+    }
+
+    pub fn init_pool_book(
+        ctx: Context<InitPoolBook>,
+        computation_offset: u64,
+        book_ciphertexts: [[u8; 32]; POOL_BOOK_CIPHERTEXTS],
+        pubkey: [u8; 32],
+        nonce: u128,
+    ) -> Result<()> {
+        require!(!ctx.accounts.pool_book.is_initialized, ErrorCode::PoolAlreadyInitialized);
+
+        ctx.accounts.sign_pda_account.bump = ctx.bumps.sign_pda_account;
+        let mut args = ArgBuilder::new().x25519_pubkey(pubkey).plaintext_u128(nonce);
+        for ciphertext in book_ciphertexts {
+            args = args.encrypted_u64(ciphertext);
+        }
+        let args = args.build();
+
+        queue_computation(
+            ctx.accounts,
+            computation_offset,
+            args,
+            vec![InitPoolBookCallback::callback_ix(
+                computation_offset,
+                &ctx.accounts.mxe_account,
+                &[CallbackAccount {
+                    pubkey: ctx.accounts.pool_book.key(),
+                    is_writable: true,
+                }],
+            )?],
+            1,
+            0,
+        )?;
+        Ok(())
+    }
+
+    #[arcium_callback(encrypted_ix = "init_pool_book")]
+    pub fn init_pool_book_callback(
+        ctx: Context<InitPoolBookCallback>,
+        output: SignedComputationOutputs<InitPoolBookOutput>,
+    ) -> Result<()> {
+        let o = match output.verify_output(
+            &ctx.accounts.cluster_account,
+            &ctx.accounts.computation_account,
+        ) {
+            Ok(InitPoolBookOutput { field_0 }) => field_0,
+            Err(_) => return Err(ErrorCode::AbortedComputation.into()),
+        };
+        let pool = &mut ctx.accounts.pool_book;
+        pool.encrypted_book.copy_from_slice(&o.ciphertexts[..POOL_BOOK_CIPHERTEXTS]);
+        pool.book_nonce = o.nonce;
+        pool.is_initialized = true;
+        Ok(())
+    }
+
+    pub fn deposit_pool_order(
+        ctx: Context<DepositPoolOrder>,
+        computation_offset: u64,
+        vault_ct_balance: [u8; 32],
+        vault_ct_price: [u8; 32],
+        pubkey: [u8; 32],
+        nonce: u128,
+        deposit_amount: u64,
+        urgency_level: u8,
+    ) -> Result<()> {
+        require!(ctx.accounts.pool_book.is_initialized, ErrorCode::PoolNotReady);
+        require!(!ctx.accounts.pool_book.is_matching, ErrorCode::PoolBusy);
+
+        let slot = ctx
+            .accounts
+            .pool_book
+            .occupied
+            .iter()
+            .position(|occupied| !*occupied)
+            .ok_or(ErrorCode::PoolFull)? as u8;
+
+        token::transfer(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.depositor_token_account.to_account_info(),
+                    to: ctx.accounts.pool_wsol_vault.to_account_info(),
+                    authority: ctx.accounts.owner.to_account_info(),
+                },
+            ),
+            deposit_amount,
+        )?;
+
+        let ticket = &mut ctx.accounts.deposit_ticket;
+        ticket.pool = ctx.accounts.pool_book.key();
+        ticket.owner = ctx.accounts.owner.key();
+        ticket.slot = slot;
+        ticket.bump = ctx.bumps.deposit_ticket;
+
+        ctx.accounts.sign_pda_account.bump = ctx.bumps.sign_pda_account;
+        let mut args = ArgBuilder::new()
+            .plaintext_u128(ctx.accounts.pool_book.book_nonce);
+        for ciphertext in ctx.accounts.pool_book.encrypted_book {
+            args = args.encrypted_u64(ciphertext);
+        }
+        let args = args
+            .x25519_pubkey(pubkey)
+            .plaintext_u128(nonce)
+            .encrypted_u64(vault_ct_balance)
+            .encrypted_u64(vault_ct_price)
+            .plaintext_u8(slot)
+            .build();
+
+        queue_computation(
+            ctx.accounts,
+            computation_offset,
+            args,
+            vec![AddPoolOrderCallback::callback_ix(
+                computation_offset,
+                &ctx.accounts.mxe_account,
+                &[
+                    CallbackAccount {
+                        pubkey: ctx.accounts.pool_book.key(),
+                        is_writable: true,
+                    },
+                    CallbackAccount {
+                        pubkey: ctx.accounts.deposit_ticket.key(),
+                        is_writable: true,
+                    },
+                    CallbackAccount {
+                        pubkey: ctx.accounts.owner.key(),
+                        is_writable: true,
+                    },
+                ],
+            )?],
+            1,
+            0,
+        )?;
+
+        emit!(PoolOrderQueued {
+            owner: ctx.accounts.owner.key(),
+            slot,
+            computation_offset,
+            urgency_level,
+        });
+        Ok(())
+    }
+
+    #[arcium_callback(encrypted_ix = "add_pool_order")]
+    pub fn add_pool_order_callback(
+        ctx: Context<AddPoolOrderCallback>,
+        output: SignedComputationOutputs<AddPoolOrderOutput>,
+    ) -> Result<()> {
+        let o = match output.verify_output(
+            &ctx.accounts.cluster_account,
+            &ctx.accounts.computation_account,
+        ) {
+            Ok(AddPoolOrderOutput { field_0 }) => field_0,
+            Err(_) => return Err(ErrorCode::AbortedComputation.into()),
+        };
+
+        let pool = &mut ctx.accounts.pool_book;
+        let ticket = &ctx.accounts.deposit_ticket;
+        let slot = ticket.slot as usize;
+        require!(slot < POOL_SLOT_COUNT, ErrorCode::InvalidPoolSlot);
+        require!(!pool.occupied[slot], ErrorCode::PoolSlotOccupied);
+
+        pool.encrypted_book.copy_from_slice(&o.ciphertexts[..POOL_BOOK_CIPHERTEXTS]);
+        pool.book_nonce = o.nonce;
+        pool.owners[slot] = ticket.owner;
+        pool.occupied[slot] = true;
+
+        emit!(PoolOrderAdded {
+            owner: ticket.owner,
+            slot: ticket.slot,
+        });
+        Ok(())
+    }
+
+    pub fn secure_pool_buy_request(
+        ctx: Context<SecurePoolBuyRequest>,
+        computation_offset: u64,
+        request_ct_amount: [u8; 32],
+        request_ct_price: [u8; 32],
+        buyer_pubkey: [u8; 32],
+        buyer_nonce: u128,
+    ) -> Result<()> {
+        let pool = &mut ctx.accounts.pool_book;
+        require!(pool.is_initialized, ErrorCode::PoolNotReady);
+        require!(!pool.is_matching, ErrorCode::PoolBusy);
+        require!(pool.occupied.iter().any(|occupied| *occupied), ErrorCode::NoPoolLiquidity);
+
+        pool.is_matching = true;
+
+        let fill = &mut ctx.accounts.pool_fill;
+        fill.pool = pool.key();
+        fill.buyer = ctx.accounts.buyer.key();
+        fill.total_filled_lamports = 0;
+        fill.total_cost_usdc = 0;
+        fill.slot_fills = [0u64; POOL_SLOT_COUNT];
+        fill.slot_costs = [0u64; POOL_SLOT_COUNT];
+        fill.is_filled = false;
+        fill.is_finalized = false;
+        fill.is_settled = false;
+        fill.bump = ctx.bumps.pool_fill;
+
+        ctx.accounts.sign_pda_account.bump = ctx.bumps.sign_pda_account;
+        let mut args = ArgBuilder::new().plaintext_u128(pool.book_nonce);
+        for ciphertext in pool.encrypted_book {
+            args = args.encrypted_u64(ciphertext);
+        }
+        let args = args
+            .x25519_pubkey(buyer_pubkey)
+            .plaintext_u128(buyer_nonce)
+            .encrypted_u64(request_ct_amount)
+            .encrypted_u64(request_ct_price)
+            .build();
+
+        queue_computation(
+            ctx.accounts,
+            computation_offset,
+            args,
+            vec![MatchPoolV2Callback::callback_ix(
+                computation_offset,
+                &ctx.accounts.mxe_account,
+                &[
+                    CallbackAccount {
+                        pubkey: ctx.accounts.pool_book.key(),
+                        is_writable: true,
+                    },
+                    CallbackAccount {
+                        pubkey: ctx.accounts.pool_fill.key(),
+                        is_writable: true,
+                    },
+                ],
+            )?],
+            1,
+            0,
+        )?;
+
+        emit!(PoolBuyQueued {
+            buyer: ctx.accounts.buyer.key(),
+            computation_offset,
+        });
+        Ok(())
+    }
+
+    #[arcium_callback(encrypted_ix = "match_pool_v2")]
+    pub fn match_pool_v2_callback(
+        ctx: Context<MatchPoolV2Callback>,
+        output: SignedComputationOutputs<MatchPoolV2Output>,
+    ) -> Result<()> {
+        let o = match output.verify_output(
+            &ctx.accounts.cluster_account,
+            &ctx.accounts.computation_account,
+        ) {
+            Ok(o) => o,
+            Err(_) => {
+                ctx.accounts.pool_book.is_matching = false;
+                return Err(ErrorCode::AbortedComputation.into());
+            }
+        };
+
+        let result = o.field_0;
+        let total_filled = result.field_0;
+        let total_cost = result.field_1;
+        let fill0 = result.field_2;
+        let cost0 = result.field_3;
+        let fill1 = result.field_4;
+        let cost1 = result.field_5;
+        let fill2 = result.field_6;
+        let cost2 = result.field_7;
+        let fill3 = result.field_8;
+        let cost3 = result.field_9;
+        let buyer_result = &result.field_10;
+        let updated_book = &result.field_11;
+
+        let pool = &mut ctx.accounts.pool_book;
+        pool.encrypted_book.copy_from_slice(&updated_book.ciphertexts[..POOL_BOOK_CIPHERTEXTS]);
+        pool.book_nonce = updated_book.nonce;
+        pool.is_matching = false;
+
+        let slot_costs = [cost0, cost1, cost2, cost3];
+        for i in 0..POOL_SLOT_COUNT {
+            pool.accrued_usdc[i] = pool.accrued_usdc[i]
+                .checked_add(slot_costs[i])
+                .ok_or(ErrorCode::MathOverflow)?;
+        }
+
+        let fill = &mut ctx.accounts.pool_fill;
+        fill.total_filled_lamports = total_filled;
+        fill.total_cost_usdc = total_cost;
+        fill.slot_fills = [fill0, fill1, fill2, fill3];
+        fill.slot_costs = slot_costs;
+        fill.is_filled = true;
+
+        emit!(PoolMatchResultEvent {
+            pool: pool.key(),
+            fill: fill.key(),
+            filled_amount_ciphertext: buyer_result.ciphertexts[0],
+            cost_ciphertext: buyer_result.ciphertexts[1],
+            result_nonce: buyer_result.nonce.to_le_bytes(),
+        });
+        Ok(())
+    }
+
+    pub fn finalize_pool_fill(ctx: Context<FinalizePoolFill>) -> Result<()> {
+        let fill = &mut ctx.accounts.pool_fill;
+        require!(fill.is_filled, ErrorCode::NotYetFilled);
+        require!(!fill.is_finalized, ErrorCode::AlreadyFinalized);
+        fill.is_finalized = true;
+
+        emit!(PoolFillFinalized {
+            pool: fill.pool,
+            fill: fill.key(),
+            buyer: fill.buyer,
+            filled_lamports: fill.total_filled_lamports,
+            cost_usdc: fill.total_cost_usdc,
+        });
+        Ok(())
+    }
+
+    pub fn settle_pool_fill(ctx: Context<SettlePoolFill>) -> Result<()> {
+        let fill = &mut ctx.accounts.pool_fill;
+        require!(fill.is_finalized, ErrorCode::NotFinalized);
+        require!(!fill.is_settled, ErrorCode::AlreadySettled);
+        require!(fill.total_filled_lamports > 0, ErrorCode::NothingToSettle);
+
+        let pool_key = ctx.accounts.pool_book.key();
+        let seeds = &[
+            b"pool_wsol_vault",
+            pool_key.as_ref(),
+            &[ctx.accounts.pool_book.wsol_vault_bump],
+        ];
+
+        token::transfer(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.pool_wsol_vault.to_account_info(),
+                    to: ctx.accounts.buyer_wsol_ata.to_account_info(),
+                    authority: ctx.accounts.pool_wsol_vault.to_account_info(),
+                },
+                &[&seeds[..]],
+            ),
+            fill.total_filled_lamports,
+        )?;
+
+        token::transfer(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.buyer_usdc_ata.to_account_info(),
+                    to: ctx.accounts.pool_usdc_vault.to_account_info(),
+                    authority: ctx.accounts.buyer.to_account_info(),
+                },
+            ),
+            fill.total_cost_usdc,
+        )?;
+
+        fill.is_settled = true;
+        emit!(PoolSettled {
+            pool: ctx.accounts.pool_book.key(),
+            fill: fill.key(),
+            buyer: fill.buyer,
+            filled_lamports: fill.total_filled_lamports,
+            cost_usdc: fill.total_cost_usdc,
+        });
+        Ok(())
+    }
+
+    pub fn withdraw_pool_seller_credit(
+        ctx: Context<WithdrawPoolSellerCredit>,
+        slot: u8,
+    ) -> Result<()> {
+        let slot_idx = slot as usize;
+        require!(slot_idx < POOL_SLOT_COUNT, ErrorCode::InvalidPoolSlot);
+        require!(
+            ctx.accounts.pool_book.owners[slot_idx] == ctx.accounts.owner.key(),
+            ErrorCode::UnauthorizedPoolSlot
+        );
+
+        let amount = ctx.accounts.pool_book.accrued_usdc[slot_idx];
+        require!(amount > 0, ErrorCode::NothingToWithdraw);
+        ctx.accounts.pool_book.accrued_usdc[slot_idx] = 0;
+
+        let pool_key = ctx.accounts.pool_book.key();
+        let seeds = &[
+            b"pool_usdc_vault",
+            pool_key.as_ref(),
+            &[ctx.accounts.pool_book.usdc_vault_bump],
+        ];
+
+        token::transfer(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.pool_usdc_vault.to_account_info(),
+                    to: ctx.accounts.owner_usdc_ata.to_account_info(),
+                    authority: ctx.accounts.pool_usdc_vault.to_account_info(),
+                },
+                &[&seeds[..]],
+            ),
+            amount,
+        )?;
+        Ok(())
+    }
+
+    pub fn request_cancel_pool_order(
+        ctx: Context<RequestCancelPoolOrder>,
+        computation_offset: u64,
+        slot: u8,
+    ) -> Result<()> {
+        let slot_idx = slot as usize;
+        require!(slot_idx < POOL_SLOT_COUNT, ErrorCode::InvalidPoolSlot);
+        require!(ctx.accounts.pool_book.is_initialized, ErrorCode::PoolNotReady);
+        require!(!ctx.accounts.pool_book.is_matching, ErrorCode::PoolBusy);
+        require!(
+            ctx.accounts.pool_book.owners[slot_idx] == ctx.accounts.owner.key(),
+            ErrorCode::UnauthorizedPoolSlot
+        );
+        require!(ctx.accounts.pool_book.occupied[slot_idx], ErrorCode::PoolSlotEmpty);
+
+        let ticket = &mut ctx.accounts.cancel_ticket;
+        ticket.pool = ctx.accounts.pool_book.key();
+        ticket.owner = ctx.accounts.owner.key();
+        ticket.slot = slot;
+        ticket.remaining_lamports = 0;
+        ticket.bump = ctx.bumps.cancel_ticket;
+        ticket.is_ready = false;
+        ticket.is_withdrawn = false;
+
+        ctx.accounts.pool_book.is_matching = true;
+        ctx.accounts.sign_pda_account.bump = ctx.bumps.sign_pda_account;
+
+        let mut args = ArgBuilder::new().plaintext_u128(ctx.accounts.pool_book.book_nonce);
+        for ciphertext in ctx.accounts.pool_book.encrypted_book {
+            args = args.encrypted_u64(ciphertext);
+        }
+        let args = args.plaintext_u8(slot).build();
+
+        queue_computation(
+            ctx.accounts,
+            computation_offset,
+            args,
+            vec![CancelPoolOrderCallback::callback_ix(
+                computation_offset,
+                &ctx.accounts.mxe_account,
+                &[
+                    CallbackAccount {
+                        pubkey: ctx.accounts.pool_book.key(),
+                        is_writable: true,
+                    },
+                    CallbackAccount {
+                        pubkey: ctx.accounts.cancel_ticket.key(),
+                        is_writable: true,
+                    },
+                ],
+            )?],
+            1,
+            0,
+        )?;
+        Ok(())
+    }
+
+    #[arcium_callback(encrypted_ix = "cancel_pool_order")]
+    pub fn cancel_pool_order_callback(
+        ctx: Context<CancelPoolOrderCallback>,
+        output: SignedComputationOutputs<CancelPoolOrderOutput>,
+    ) -> Result<()> {
+        let o = match output.verify_output(
+            &ctx.accounts.cluster_account,
+            &ctx.accounts.computation_account,
+        ) {
+            Ok(o) => o,
+            Err(_) => {
+                ctx.accounts.pool_book.is_matching = false;
+                return Err(ErrorCode::AbortedComputation.into());
+            }
+        };
+
+        let result = o.field_0;
+        let remaining_lamports = result.field_0;
+        let updated_book = &result.field_1;
+
+        let slot_idx = ctx.accounts.cancel_ticket.slot as usize;
+        require!(slot_idx < POOL_SLOT_COUNT, ErrorCode::InvalidPoolSlot);
+
+        let pool = &mut ctx.accounts.pool_book;
+        pool.encrypted_book.copy_from_slice(&updated_book.ciphertexts[..POOL_BOOK_CIPHERTEXTS]);
+        pool.book_nonce = updated_book.nonce;
+        pool.occupied[slot_idx] = false;
+        pool.owners[slot_idx] = Pubkey::default();
+        pool.is_matching = false;
+
+        let ticket = &mut ctx.accounts.cancel_ticket;
+        ticket.remaining_lamports = remaining_lamports;
+        ticket.is_ready = true;
+        Ok(())
+    }
+
+    pub fn withdraw_cancelled_pool_order(ctx: Context<WithdrawCancelledPoolOrder>) -> Result<()> {
+        require!(ctx.accounts.cancel_ticket.is_ready, ErrorCode::CancelNotReady);
+        require!(!ctx.accounts.cancel_ticket.is_withdrawn, ErrorCode::AlreadyWithdrawn);
+
+        let amount = ctx.accounts.cancel_ticket.remaining_lamports;
+        require!(amount > 0, ErrorCode::NothingToWithdraw);
+        ctx.accounts.cancel_ticket.is_withdrawn = true;
+
+        let pool_key = ctx.accounts.pool_book.key();
+        let seeds = &[
+            b"pool_wsol_vault",
+            pool_key.as_ref(),
+            &[ctx.accounts.pool_book.wsol_vault_bump],
+        ];
+
+        token::transfer(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.pool_wsol_vault.to_account_info(),
+                    to: ctx.accounts.owner_token_account.to_account_info(),
+                    authority: ctx.accounts.pool_wsol_vault.to_account_info(),
+                },
+                &[&seeds[..]],
+            ),
+            amount,
         )?;
         Ok(())
     }
@@ -435,6 +1031,452 @@ pub struct InitRevealFillCompDef<'info> {
     pub arcium_program: Program<'info, Arcium>,
 }
 
+#[init_computation_definition_accounts("init_pool_book", payer)]
+#[derive(Accounts)]
+pub struct InitPoolBookCompDef<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(mut, address = derive_mxe_pda!())]
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
+    #[account(mut, address = derive_comp_def_pda!(COMP_DEF_OFFSET_INIT_POOL_BOOK))]
+    /// CHECK: initialized and checked by the Arcium program.
+    pub comp_def_account: UncheckedAccount<'info>,
+    #[account(mut, address = derive_mxe_lut_pda!(mxe_account.lut_offset_slot))]
+    /// CHECK: checked by the Arcium program.
+    pub address_lookup_table: UncheckedAccount<'info>,
+    #[account(address = LUT_PROGRAM_ID)]
+    /// CHECK: checked by the Arcium program.
+    pub lut_program: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+    pub arcium_program: Program<'info, Arcium>,
+}
+
+#[init_computation_definition_accounts("add_pool_order", payer)]
+#[derive(Accounts)]
+pub struct InitAddPoolOrderCompDef<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(mut, address = derive_mxe_pda!())]
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
+    #[account(mut, address = derive_comp_def_pda!(COMP_DEF_OFFSET_ADD_POOL_ORDER))]
+    /// CHECK: initialized and checked by the Arcium program.
+    pub comp_def_account: UncheckedAccount<'info>,
+    #[account(mut, address = derive_mxe_lut_pda!(mxe_account.lut_offset_slot))]
+    /// CHECK: checked by the Arcium program.
+    pub address_lookup_table: UncheckedAccount<'info>,
+    #[account(address = LUT_PROGRAM_ID)]
+    /// CHECK: checked by the Arcium program.
+    pub lut_program: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+    pub arcium_program: Program<'info, Arcium>,
+}
+
+#[init_computation_definition_accounts("match_pool_v2", payer)]
+#[derive(Accounts)]
+pub struct InitMatchPoolV2CompDef<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(mut, address = derive_mxe_pda!())]
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
+    #[account(mut, address = derive_comp_def_pda!(COMP_DEF_OFFSET_MATCH_POOL_V2))]
+    /// CHECK: initialized and checked by the Arcium program.
+    pub comp_def_account: UncheckedAccount<'info>,
+    #[account(mut, address = derive_mxe_lut_pda!(mxe_account.lut_offset_slot))]
+    /// CHECK: checked by the Arcium program.
+    pub address_lookup_table: UncheckedAccount<'info>,
+    #[account(address = LUT_PROGRAM_ID)]
+    /// CHECK: checked by the Arcium program.
+    pub lut_program: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+    pub arcium_program: Program<'info, Arcium>,
+}
+
+#[init_computation_definition_accounts("cancel_pool_order", payer)]
+#[derive(Accounts)]
+pub struct InitCancelPoolOrderCompDef<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(mut, address = derive_mxe_pda!())]
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
+    #[account(mut, address = derive_comp_def_pda!(COMP_DEF_OFFSET_CANCEL_POOL_ORDER))]
+    /// CHECK: initialized and checked by the Arcium program.
+    pub comp_def_account: UncheckedAccount<'info>,
+    #[account(mut, address = derive_mxe_lut_pda!(mxe_account.lut_offset_slot))]
+    /// CHECK: checked by the Arcium program.
+    pub address_lookup_table: UncheckedAccount<'info>,
+    #[account(address = LUT_PROGRAM_ID)]
+    /// CHECK: checked by the Arcium program.
+    pub lut_program: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+    pub arcium_program: Program<'info, Arcium>,
+}
+
+#[derive(Accounts)]
+pub struct InitializePool<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    #[account(
+        init, payer = authority, space = PoolBook::LEN,
+        seeds = [b"pool_book"], bump,
+    )]
+    pub pool_book: Box<Account<'info, PoolBook>>,
+    /// CHECK: mint address stored and checked by token constraints.
+    pub sol_mint: AccountInfo<'info>,
+    /// CHECK: mint address stored and checked by token constraints.
+    pub usdc_mint: AccountInfo<'info>,
+    #[account(
+        init, payer = authority,
+        token::mint = sol_mint, token::authority = pool_wsol_vault,
+        seeds = [b"pool_wsol_vault", pool_book.key().as_ref()], bump,
+    )]
+    pub pool_wsol_vault: Box<Account<'info, TokenAccount>>,
+    #[account(
+        init, payer = authority,
+        token::mint = usdc_mint, token::authority = pool_usdc_vault,
+        seeds = [b"pool_usdc_vault", pool_book.key().as_ref()], bump,
+    )]
+    pub pool_usdc_vault: Box<Account<'info, TokenAccount>>,
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
+}
+
+#[queue_computation_accounts("init_pool_book", authority)]
+#[derive(Accounts)]
+#[instruction(computation_offset: u64)]
+pub struct InitPoolBook<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    #[account(mut, seeds = [b"pool_book"], bump = pool_book.bump)]
+    pub pool_book: Box<Account<'info, PoolBook>>,
+    #[account(
+        init_if_needed, space = 9, payer = authority,
+        seeds = [&SIGN_PDA_SEED], bump, address = derive_sign_pda!(),
+    )]
+    pub sign_pda_account: Box<Account<'info, ArciumSignerAccount>>,
+    #[account(address = derive_mxe_pda!())]
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
+    #[account(mut, address = derive_mempool_pda!(mxe_account, ErrorCode::ClusterNotSet))]
+    /// CHECK: checked by arcium
+    pub mempool_account: UncheckedAccount<'info>,
+    #[account(mut, address = derive_execpool_pda!(mxe_account, ErrorCode::ClusterNotSet))]
+    /// CHECK: checked by arcium
+    pub executing_pool: UncheckedAccount<'info>,
+    #[account(mut, address = derive_comp_pda!(computation_offset, mxe_account, ErrorCode::ClusterNotSet))]
+    /// CHECK: checked by arcium
+    pub computation_account: UncheckedAccount<'info>,
+    #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_INIT_POOL_BOOK))]
+    pub comp_def_account: Box<Account<'info, ComputationDefinitionAccount>>,
+    #[account(mut, address = derive_cluster_pda!(mxe_account, ErrorCode::ClusterNotSet))]
+    pub cluster_account: Box<Account<'info, Cluster>>,
+    #[account(mut, address = ARCIUM_FEE_POOL_ACCOUNT_ADDRESS)]
+    pub pool_account: Box<Account<'info, FeePool>>,
+    #[account(mut, address = ARCIUM_CLOCK_ACCOUNT_ADDRESS)]
+    pub clock_account: Box<Account<'info, ClockAccount>>,
+    pub system_program: Program<'info, System>,
+    pub arcium_program: Program<'info, Arcium>,
+}
+
+#[callback_accounts("init_pool_book")]
+#[derive(Accounts)]
+pub struct InitPoolBookCallback<'info> {
+    pub arcium_program: Program<'info, Arcium>,
+    #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_INIT_POOL_BOOK))]
+    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    #[account(address = derive_mxe_pda!())]
+    pub mxe_account: Account<'info, MXEAccount>,
+    /// CHECK: checked by arcium
+    pub computation_account: UncheckedAccount<'info>,
+    #[account(address = derive_cluster_pda!(mxe_account, ErrorCode::ClusterNotSet))]
+    pub cluster_account: Account<'info, Cluster>,
+    #[account(address = ::anchor_lang::solana_program::sysvar::instructions::ID)]
+    /// CHECK: sysvar
+    pub instructions_sysvar: AccountInfo<'info>,
+    #[account(mut)]
+    pub pool_book: Box<Account<'info, PoolBook>>,
+}
+
+#[queue_computation_accounts("add_pool_order", owner)]
+#[derive(Accounts)]
+#[instruction(computation_offset: u64)]
+pub struct DepositPoolOrder<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    #[account(mut, seeds = [b"pool_book"], bump = pool_book.bump)]
+    pub pool_book: Box<Account<'info, PoolBook>>,
+    #[account(mut, address = pool_book.wsol_vault)]
+    pub pool_wsol_vault: Box<Account<'info, TokenAccount>>,
+    #[account(mut)]
+    pub depositor_token_account: Box<Account<'info, TokenAccount>>,
+    #[account(
+        init, payer = owner, space = PoolDepositTicket::LEN,
+        seeds = [b"pool_deposit", owner.key().as_ref(), &computation_offset.to_le_bytes()], bump,
+    )]
+    pub deposit_ticket: Box<Account<'info, PoolDepositTicket>>,
+    #[account(
+        init_if_needed, space = 9, payer = owner,
+        seeds = [&SIGN_PDA_SEED], bump, address = derive_sign_pda!(),
+    )]
+    pub sign_pda_account: Box<Account<'info, ArciumSignerAccount>>,
+    #[account(address = derive_mxe_pda!())]
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
+    #[account(mut, address = derive_mempool_pda!(mxe_account, ErrorCode::ClusterNotSet))]
+    /// CHECK: checked by arcium
+    pub mempool_account: UncheckedAccount<'info>,
+    #[account(mut, address = derive_execpool_pda!(mxe_account, ErrorCode::ClusterNotSet))]
+    /// CHECK: checked by arcium
+    pub executing_pool: UncheckedAccount<'info>,
+    #[account(mut, address = derive_comp_pda!(computation_offset, mxe_account, ErrorCode::ClusterNotSet))]
+    /// CHECK: checked by arcium
+    pub computation_account: UncheckedAccount<'info>,
+    #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_ADD_POOL_ORDER))]
+    pub comp_def_account: Box<Account<'info, ComputationDefinitionAccount>>,
+    #[account(mut, address = derive_cluster_pda!(mxe_account, ErrorCode::ClusterNotSet))]
+    pub cluster_account: Box<Account<'info, Cluster>>,
+    #[account(mut, address = ARCIUM_FEE_POOL_ACCOUNT_ADDRESS)]
+    pub pool_account: Box<Account<'info, FeePool>>,
+    #[account(mut, address = ARCIUM_CLOCK_ACCOUNT_ADDRESS)]
+    pub clock_account: Box<Account<'info, ClockAccount>>,
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+    pub arcium_program: Program<'info, Arcium>,
+}
+
+#[callback_accounts("add_pool_order")]
+#[derive(Accounts)]
+pub struct AddPoolOrderCallback<'info> {
+    pub arcium_program: Program<'info, Arcium>,
+    #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_ADD_POOL_ORDER))]
+    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    #[account(address = derive_mxe_pda!())]
+    pub mxe_account: Account<'info, MXEAccount>,
+    /// CHECK: checked by arcium
+    pub computation_account: UncheckedAccount<'info>,
+    #[account(address = derive_cluster_pda!(mxe_account, ErrorCode::ClusterNotSet))]
+    pub cluster_account: Account<'info, Cluster>,
+    #[account(address = ::anchor_lang::solana_program::sysvar::instructions::ID)]
+    /// CHECK: sysvar
+    pub instructions_sysvar: AccountInfo<'info>,
+    #[account(mut)]
+    pub pool_book: Box<Account<'info, PoolBook>>,
+    #[account(mut, close = owner)]
+    pub deposit_ticket: Box<Account<'info, PoolDepositTicket>>,
+    #[account(mut, address = deposit_ticket.owner)]
+    /// CHECK: receives closed ticket rent.
+    pub owner: AccountInfo<'info>,
+}
+
+#[queue_computation_accounts("match_pool_v2", buyer)]
+#[derive(Accounts)]
+#[instruction(computation_offset: u64)]
+pub struct SecurePoolBuyRequest<'info> {
+    #[account(mut)]
+    pub buyer: Signer<'info>,
+    #[account(mut, seeds = [b"pool_book"], bump = pool_book.bump)]
+    pub pool_book: Box<Account<'info, PoolBook>>,
+    #[account(
+        init, payer = buyer, space = PoolFill::LEN,
+        seeds = [b"pool_fill", pool_book.key().as_ref(), buyer.key().as_ref(), &computation_offset.to_le_bytes()], bump,
+    )]
+    pub pool_fill: Box<Account<'info, PoolFill>>,
+    #[account(
+        init_if_needed, space = 9, payer = buyer,
+        seeds = [&SIGN_PDA_SEED], bump, address = derive_sign_pda!(),
+    )]
+    pub sign_pda_account: Box<Account<'info, ArciumSignerAccount>>,
+    #[account(address = derive_mxe_pda!())]
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
+    #[account(mut, address = derive_mempool_pda!(mxe_account, ErrorCode::ClusterNotSet))]
+    /// CHECK: checked by arcium
+    pub mempool_account: UncheckedAccount<'info>,
+    #[account(mut, address = derive_execpool_pda!(mxe_account, ErrorCode::ClusterNotSet))]
+    /// CHECK: checked by arcium
+    pub executing_pool: UncheckedAccount<'info>,
+    #[account(mut, address = derive_comp_pda!(computation_offset, mxe_account, ErrorCode::ClusterNotSet))]
+    /// CHECK: checked by arcium
+    pub computation_account: UncheckedAccount<'info>,
+    #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_MATCH_POOL_V2))]
+    pub comp_def_account: Box<Account<'info, ComputationDefinitionAccount>>,
+    #[account(mut, address = derive_cluster_pda!(mxe_account, ErrorCode::ClusterNotSet))]
+    pub cluster_account: Box<Account<'info, Cluster>>,
+    #[account(mut, address = ARCIUM_FEE_POOL_ACCOUNT_ADDRESS)]
+    pub pool_account: Box<Account<'info, FeePool>>,
+    #[account(mut, address = ARCIUM_CLOCK_ACCOUNT_ADDRESS)]
+    pub clock_account: Box<Account<'info, ClockAccount>>,
+    pub system_program: Program<'info, System>,
+    pub arcium_program: Program<'info, Arcium>,
+}
+
+#[callback_accounts("match_pool_v2")]
+#[derive(Accounts)]
+pub struct MatchPoolV2Callback<'info> {
+    pub arcium_program: Program<'info, Arcium>,
+    #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_MATCH_POOL_V2))]
+    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    #[account(address = derive_mxe_pda!())]
+    pub mxe_account: Account<'info, MXEAccount>,
+    /// CHECK: checked by arcium
+    pub computation_account: UncheckedAccount<'info>,
+    #[account(address = derive_cluster_pda!(mxe_account, ErrorCode::ClusterNotSet))]
+    pub cluster_account: Account<'info, Cluster>,
+    #[account(address = ::anchor_lang::solana_program::sysvar::instructions::ID)]
+    /// CHECK: sysvar
+    pub instructions_sysvar: AccountInfo<'info>,
+    #[account(mut)]
+    pub pool_book: Box<Account<'info, PoolBook>>,
+    #[account(mut)]
+    pub pool_fill: Box<Account<'info, PoolFill>>,
+}
+
+#[derive(Accounts)]
+pub struct FinalizePoolFill<'info> {
+    #[account(mut)]
+    pub buyer: Signer<'info>,
+    #[account(
+        mut,
+        has_one = buyer,
+        constraint = pool_fill.is_filled @ ErrorCode::NotYetFilled,
+        constraint = !pool_fill.is_finalized @ ErrorCode::AlreadyFinalized,
+    )]
+    pub pool_fill: Box<Account<'info, PoolFill>>,
+}
+
+#[derive(Accounts)]
+pub struct SettlePoolFill<'info> {
+    #[account(mut)]
+    pub buyer: Signer<'info>,
+    #[account(mut, seeds = [b"pool_book"], bump = pool_book.bump)]
+    pub pool_book: Box<Account<'info, PoolBook>>,
+    #[account(
+        mut,
+        has_one = buyer,
+        constraint = pool_fill.pool == pool_book.key(),
+        constraint = pool_fill.is_finalized @ ErrorCode::NotFinalized,
+        constraint = !pool_fill.is_settled @ ErrorCode::AlreadySettled,
+    )]
+    pub pool_fill: Box<Account<'info, PoolFill>>,
+    #[account(mut, address = pool_book.wsol_vault)]
+    pub pool_wsol_vault: Box<Account<'info, TokenAccount>>,
+    #[account(mut, address = pool_book.usdc_vault)]
+    pub pool_usdc_vault: Box<Account<'info, TokenAccount>>,
+    #[account(
+        mut,
+        constraint = buyer_wsol_ata.owner == buyer.key(),
+        constraint = buyer_wsol_ata.mint == pool_book.sol_mint,
+    )]
+    pub buyer_wsol_ata: Box<Account<'info, TokenAccount>>,
+    #[account(
+        mut,
+        constraint = buyer_usdc_ata.owner == buyer.key(),
+        constraint = buyer_usdc_ata.mint == pool_book.usdc_mint,
+    )]
+    pub buyer_usdc_ata: Box<Account<'info, TokenAccount>>,
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct WithdrawPoolSellerCredit<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    #[account(mut, seeds = [b"pool_book"], bump = pool_book.bump)]
+    pub pool_book: Box<Account<'info, PoolBook>>,
+    #[account(mut, address = pool_book.usdc_vault)]
+    pub pool_usdc_vault: Box<Account<'info, TokenAccount>>,
+    #[account(
+        mut,
+        constraint = owner_usdc_ata.owner == owner.key(),
+        constraint = owner_usdc_ata.mint == pool_book.usdc_mint,
+    )]
+    pub owner_usdc_ata: Box<Account<'info, TokenAccount>>,
+    pub token_program: Program<'info, Token>,
+}
+
+#[queue_computation_accounts("cancel_pool_order", owner)]
+#[derive(Accounts)]
+#[instruction(computation_offset: u64)]
+pub struct RequestCancelPoolOrder<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    #[account(mut, seeds = [b"pool_book"], bump = pool_book.bump)]
+    pub pool_book: Box<Account<'info, PoolBook>>,
+    #[account(
+        init, payer = owner, space = PoolCancelTicket::LEN,
+        seeds = [b"pool_cancel", owner.key().as_ref(), &computation_offset.to_le_bytes()], bump,
+    )]
+    pub cancel_ticket: Box<Account<'info, PoolCancelTicket>>,
+    #[account(
+        init_if_needed, space = 9, payer = owner,
+        seeds = [&SIGN_PDA_SEED], bump, address = derive_sign_pda!(),
+    )]
+    pub sign_pda_account: Box<Account<'info, ArciumSignerAccount>>,
+    #[account(address = derive_mxe_pda!())]
+    pub mxe_account: Box<Account<'info, MXEAccount>>,
+    #[account(mut, address = derive_mempool_pda!(mxe_account, ErrorCode::ClusterNotSet))]
+    /// CHECK: checked by arcium
+    pub mempool_account: UncheckedAccount<'info>,
+    #[account(mut, address = derive_execpool_pda!(mxe_account, ErrorCode::ClusterNotSet))]
+    /// CHECK: checked by arcium
+    pub executing_pool: UncheckedAccount<'info>,
+    #[account(mut, address = derive_comp_pda!(computation_offset, mxe_account, ErrorCode::ClusterNotSet))]
+    /// CHECK: checked by arcium
+    pub computation_account: UncheckedAccount<'info>,
+    #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_CANCEL_POOL_ORDER))]
+    pub comp_def_account: Box<Account<'info, ComputationDefinitionAccount>>,
+    #[account(mut, address = derive_cluster_pda!(mxe_account, ErrorCode::ClusterNotSet))]
+    pub cluster_account: Box<Account<'info, Cluster>>,
+    #[account(mut, address = ARCIUM_FEE_POOL_ACCOUNT_ADDRESS)]
+    pub pool_account: Box<Account<'info, FeePool>>,
+    #[account(mut, address = ARCIUM_CLOCK_ACCOUNT_ADDRESS)]
+    pub clock_account: Box<Account<'info, ClockAccount>>,
+    pub system_program: Program<'info, System>,
+    pub arcium_program: Program<'info, Arcium>,
+}
+
+#[callback_accounts("cancel_pool_order")]
+#[derive(Accounts)]
+pub struct CancelPoolOrderCallback<'info> {
+    pub arcium_program: Program<'info, Arcium>,
+    #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_CANCEL_POOL_ORDER))]
+    pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
+    #[account(address = derive_mxe_pda!())]
+    pub mxe_account: Account<'info, MXEAccount>,
+    /// CHECK: checked by arcium
+    pub computation_account: UncheckedAccount<'info>,
+    #[account(address = derive_cluster_pda!(mxe_account, ErrorCode::ClusterNotSet))]
+    pub cluster_account: Account<'info, Cluster>,
+    #[account(address = ::anchor_lang::solana_program::sysvar::instructions::ID)]
+    /// CHECK: sysvar
+    pub instructions_sysvar: AccountInfo<'info>,
+    #[account(mut)]
+    pub pool_book: Box<Account<'info, PoolBook>>,
+    #[account(mut)]
+    pub cancel_ticket: Box<Account<'info, PoolCancelTicket>>,
+}
+
+#[derive(Accounts)]
+pub struct WithdrawCancelledPoolOrder<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    #[account(seeds = [b"pool_book"], bump = pool_book.bump)]
+    pub pool_book: Box<Account<'info, PoolBook>>,
+    #[account(mut, address = pool_book.wsol_vault)]
+    pub pool_wsol_vault: Box<Account<'info, TokenAccount>>,
+    #[account(
+        mut,
+        has_one = owner,
+        constraint = cancel_ticket.pool == pool_book.key(),
+        close = owner,
+    )]
+    pub cancel_ticket: Box<Account<'info, PoolCancelTicket>>,
+    #[account(
+        mut,
+        constraint = owner_token_account.owner == owner.key(),
+        constraint = owner_token_account.mint == pool_book.sol_mint,
+    )]
+    pub owner_token_account: Box<Account<'info, TokenAccount>>,
+    pub token_program: Program<'info, Token>,
+}
+
 #[queue_computation_accounts("init_vault_balance", owner)]
 #[derive(Accounts)]
 #[instruction(computation_offset: u64)]
@@ -721,6 +1763,47 @@ pub struct Settled {
     pub filled_lamports: u64,
     pub cost_usdc: u64,
 }
+#[event]
+pub struct PoolOrderQueued {
+    pub owner: Pubkey,
+    pub slot: u8,
+    pub computation_offset: u64,
+    pub urgency_level: u8,
+}
+#[event]
+pub struct PoolOrderAdded {
+    pub owner: Pubkey,
+    pub slot: u8,
+}
+#[event]
+pub struct PoolBuyQueued {
+    pub buyer: Pubkey,
+    pub computation_offset: u64,
+}
+#[event]
+pub struct PoolMatchResultEvent {
+    pub pool: Pubkey,
+    pub fill: Pubkey,
+    pub filled_amount_ciphertext: [u8; 32],
+    pub cost_ciphertext: [u8; 32],
+    pub result_nonce: [u8; 16],
+}
+#[event]
+pub struct PoolFillFinalized {
+    pub pool: Pubkey,
+    pub fill: Pubkey,
+    pub buyer: Pubkey,
+    pub filled_lamports: u64,
+    pub cost_usdc: u64,
+}
+#[event]
+pub struct PoolSettled {
+    pub pool: Pubkey,
+    pub fill: Pubkey,
+    pub buyer: Pubkey,
+    pub filled_lamports: u64,
+    pub cost_usdc: u64,
+}
 
 #[error_code]
 pub enum ErrorCode {
@@ -748,4 +1831,26 @@ pub enum ErrorCode {
     VaultStillActive,
     #[msg("Vault token account still holds funds")]
     VaultStillFunded,
+    #[msg("The private pool book is already initialized")]
+    PoolAlreadyInitialized,
+    #[msg("The private pool is not ready yet")]
+    PoolNotReady,
+    #[msg("The private pool is busy matching another order")]
+    PoolBusy,
+    #[msg("The private pool has no open liquidity")]
+    NoPoolLiquidity,
+    #[msg("The private pool is full")]
+    PoolFull,
+    #[msg("Invalid private pool slot")]
+    InvalidPoolSlot,
+    #[msg("This private pool slot is already occupied")]
+    PoolSlotOccupied,
+    #[msg("This private pool slot is empty")]
+    PoolSlotEmpty,
+    #[msg("This wallet does not own that private pool slot")]
+    UnauthorizedPoolSlot,
+    #[msg("Math overflow")]
+    MathOverflow,
+    #[msg("The private cancellation is not ready yet")]
+    CancelNotReady,
 }

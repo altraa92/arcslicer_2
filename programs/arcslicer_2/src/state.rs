@@ -1,5 +1,8 @@
 use anchor_lang::prelude::*;
 
+pub const POOL_SLOT_COUNT: usize = 4;
+pub const POOL_BOOK_CIPHERTEXTS: usize = 8;
+
 #[account]
 pub struct SlicerParent {
     pub owner: Pubkey,
@@ -16,6 +19,99 @@ pub struct SlicerParent {
     pub encrypted_price: [u8; 32],
     pub vault_nonce: u128,
     pub is_withdrawn: bool,
+}
+
+#[account]
+pub struct PoolBook {
+    pub authority: Pubkey,
+    pub sol_mint: Pubkey,
+    pub usdc_mint: Pubkey,
+    pub wsol_vault: Pubkey,
+    pub usdc_vault: Pubkey,
+    pub owners: [Pubkey; POOL_SLOT_COUNT],
+    pub occupied: [bool; POOL_SLOT_COUNT],
+    pub accrued_usdc: [u64; POOL_SLOT_COUNT],
+    pub encrypted_book: [[u8; 32]; POOL_BOOK_CIPHERTEXTS],
+    pub book_nonce: u128,
+    pub is_initialized: bool,
+    pub is_matching: bool,
+    pub bump: u8,
+    pub wsol_vault_bump: u8,
+    pub usdc_vault_bump: u8,
+}
+
+impl PoolBook {
+    pub const LEN: usize = 8
+        + 32  // authority
+        + 32  // sol_mint
+        + 32  // usdc_mint
+        + 32  // wsol_vault
+        + 32  // usdc_vault
+        + (32 * POOL_SLOT_COUNT) // owners
+        + POOL_SLOT_COUNT // occupied flags
+        + (8 * POOL_SLOT_COUNT) // accrued usdc
+        + (32 * POOL_BOOK_CIPHERTEXTS) // encrypted book
+        + 16  // nonce
+        + 1   // is_initialized
+        + 1   // is_matching
+        + 1   // bump
+        + 1   // wsol vault bump
+        + 1; // usdc vault bump
+}
+
+#[account]
+pub struct PoolDepositTicket {
+    pub pool: Pubkey,
+    pub owner: Pubkey,
+    pub slot: u8,
+    pub bump: u8,
+}
+
+impl PoolDepositTicket {
+    pub const LEN: usize = 8 + 32 + 32 + 1 + 1;
+}
+
+#[account]
+pub struct PoolCancelTicket {
+    pub pool: Pubkey,
+    pub owner: Pubkey,
+    pub slot: u8,
+    pub remaining_lamports: u64,
+    pub bump: u8,
+    pub is_ready: bool,
+    pub is_withdrawn: bool,
+}
+
+impl PoolCancelTicket {
+    pub const LEN: usize = 8 + 32 + 32 + 1 + 8 + 1 + 1 + 1;
+}
+
+#[account]
+pub struct PoolFill {
+    pub pool: Pubkey,
+    pub buyer: Pubkey,
+    pub total_filled_lamports: u64,
+    pub total_cost_usdc: u64,
+    pub slot_fills: [u64; POOL_SLOT_COUNT],
+    pub slot_costs: [u64; POOL_SLOT_COUNT],
+    pub is_filled: bool,
+    pub is_finalized: bool,
+    pub is_settled: bool,
+    pub bump: u8,
+}
+
+impl PoolFill {
+    pub const LEN: usize = 8
+        + 32  // pool
+        + 32  // buyer
+        + 8   // total filled
+        + 8   // total cost
+        + (8 * POOL_SLOT_COUNT) // slot fills
+        + (8 * POOL_SLOT_COUNT) // slot costs
+        + 1   // is_filled
+        + 1   // is_finalized
+        + 1   // is_settled
+        + 1; // bump
 }
 
 impl SlicerParent {

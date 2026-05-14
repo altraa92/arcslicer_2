@@ -4,24 +4,12 @@ import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { PublicKey } from "@solana/web3.js";
 import { useArciumCipher } from "../hooks/useArciumCipher";
-import { useDepositVault } from "../hooks/useDepositVault";
-import { useSecureBuy } from "../hooks/useSecureBuy";
+import { usePrivatePool, type PoolSnapshot } from "../hooks/usePrivatePool";
 import { useFaucet } from "../hooks/useFaucet";
 import { PROGRAM_ID, USDC_MINT } from "../config/constants";
 import idl from "../idl/arcslicer_2.json";
 
-interface VaultEntry {
-  pubkey: PublicKey;
-  owner: PublicKey;
-  totalDeposit: bigint;
-  remainingBalance: bigint;
-  isWithdrawn: boolean;
-  urgencyLevel: number;
-  filledAmount: bigint;
-}
-
 interface PurchaseRecord {
-  vaultKey: string;
   filledAmount: bigint;
   cost: bigint;
   txSig: string;
@@ -32,16 +20,7 @@ const fmtSol = (n: bigint) =>
   (Number(n) / 1e9).toLocaleString(undefined, { maximumFractionDigits: 4 }) +
   " SOL";
 
-const fmtStatSol = (n: bigint) => (n === 0n ? "—" : fmtSol(n));
 const fmtStatNumber = (n: number) => (n === 0 ? "—" : n.toString());
-const getFilledAmount = (total: bigint, remaining: bigint) =>
-  total > remaining ? total - remaining : 0n;
-const getFillPct = (total: bigint, remaining: bigint) => {
-  if (total <= 0n) return 0;
-  const filled = getFilledAmount(total, remaining);
-  const pct = Number((filled * 10000n) / total) / 100;
-  return Math.max(0, Math.min(100, Math.round(pct)));
-};
 
 const fmtCost = (raw: bigint) =>
   "$" +
@@ -61,8 +40,6 @@ const shortKey = (k: PublicKey | string) => {
   const s = typeof k === "string" ? k : k.toBase58();
   return s.slice(0, 5) + "..." + s.slice(-4);
 };
-
-type View = "market" | "sell" | "manage" | "history";
 
 const IconFaucet = () => (
   <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -117,27 +94,6 @@ const IconExternal = () => (
       d="M6.5 1h2.5v2.5M9 1L5 5"
       stroke="currentColor"
       strokeWidth="1.1"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-const IconClose = () => (
-  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-    <path
-      d="M2 2l8 8M10 2L2 10"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinecap="round"
-    />
-  </svg>
-);
-const IconArrow = () => (
-  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-    <path
-      d="M2 6h8M7 3l3 3-3 3"
-      stroke="currentColor"
-      strokeWidth="1.3"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
@@ -249,27 +205,19 @@ const IconVaultEmpty = () => (
   </svg>
 );
 
-const SLICER_PARENT_LEN =
-  8 + 32 + 32 + 32 + 32 + 8 + 8 + 1 + 8 + 1 + 1 + 32 + 32 + 16 + 1; // 244
-
 export default function DarkPool() {
   const { connection } = useConnection();
   const wallet = useWallet();
 
   const [provider, setProvider] = useState<anchor.AnchorProvider | null>(null);
   const [program, setProgram] = useState<anchor.Program<any> | null>(null);
-  const [view, setView] = useState<View>("market");
-
-  const [vaults, setVaults] = useState<VaultEntry[]>([]);
-  const [loadingVaults, setLoadingVaults] = useState(false);
-  const [selectedVault, setSelectedVault] = useState<VaultEntry | null>(null);
-
   const [depositSol, setDepositSol] = useState("");
   const [priceUsdc, setPriceUsdc] = useState("");
   const [urgency, setUrgency] = useState<1 | 2 | 3>(2);
   const [buyAmtSol, setBuyAmtSol] = useState("");
-  const [withdrawing, setWithdrawing] = useState(false);
   const [maxPriceUsdc, setMaxPriceUsdc] = useState("");
+  const [poolSnapshot, setPoolSnapshot] = useState<PoolSnapshot | null>(null);
+  const [loadingPool, setLoadingPool] = useState(false);
 
   const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
 
@@ -287,20 +235,19 @@ export default function DarkPool() {
 
   const {
     deposit,
-    withdraw,
-    status: dStatus,
-    txSig: dSig,
-    error: dErr,
-    getParentPda,
-  } = useDepositVault(program, provider, cipher);
-
-  const {
-    submitBuy,
-    status: bStatus,
-    txSig: bSig,
+    buy,
+    withdrawCredit,
+    cancelAndWithdraw,
+    fetchPool,
+    depositStatus: dStatus,
+    buyStatus: bStatus,
+    manageStatus,
+    txSig,
     fillResult,
-    error: bErr,
-  } = useSecureBuy(program, provider, cipher);
+    depositError: dErr,
+    buyError: bErr,
+    manageError,
+  } = usePrivatePool(program, provider, cipher);
 
   const {
     requestAirdrop,
@@ -308,90 +255,48 @@ export default function DarkPool() {
     faucetLog,
   } = useFaucet();
 
-  const fetchVaults = useCallback(async () => {
-    if (!program) return;
-    setLoadingVaults(true);
+  const refreshPool = useCallback(async () => {
+    if (!program || !wallet.publicKey) return;
+    setLoadingPool(true);
     try {
-      const rawParents = await program.provider.connection.getProgramAccounts(
-        program.programId,
-        {
-          filters: [{ dataSize: SLICER_PARENT_LEN }],
-        }
-      );
-
-      const parentAccounts = rawParents.flatMap(({ pubkey, account }) => {
-        try {
-          const decoded = program.coder.accounts.decode(
-            "slicerParent",
-            account.data
-          );
-          return [{ publicKey: pubkey, account: decoded }];
-        } catch {
-          return [];
-        }
-      });
-
-      const entries: VaultEntry[] = parentAccounts
-        .filter((a: any) => !a.account.isWithdrawn)
-        .map((a: any) => {
-          const totalDeposit = BigInt(a.account.totalDeposit.toString());
-          const remainingBalance = BigInt(
-            a.account.remainingBalance.toString()
-          );
-          const filledAmount = getFilledAmount(totalDeposit, remainingBalance);
-          return {
-            pubkey: a.publicKey,
-            owner: a.account.owner,
-            totalDeposit,
-            remainingBalance,
-            isWithdrawn: a.account.isWithdrawn,
-            urgencyLevel: a.account.urgencyLevel,
-            filledAmount,
-          };
-        })
-        .filter((v: VaultEntry) => v.remainingBalance > 0n);
-
-      setVaults(entries);
-      setSelectedVault((current) => {
-        if (!current) return current;
-        return (
-          entries.find(
-            (entry) => entry.pubkey.toBase58() === current.pubkey.toBase58()
-          ) ?? null
-        );
-      });
+      setPoolSnapshot(await fetchPool());
     } catch (e) {
-      console.error("Failed to fetch vaults:", e);
+      console.error("Failed to fetch private pool:", e);
     } finally {
-      setLoadingVaults(false);
+      setLoadingPool(false);
     }
-  }, [program]);
+  }, [program, wallet.publicKey, fetchPool]);
 
   useEffect(() => {
-    if (program) fetchVaults();
-  }, [program, fetchVaults]);
+    refreshPool();
+  }, [refreshPool, dStatus, bStatus, manageStatus]);
 
   useEffect(() => {
-    if (program && view === "market") fetchVaults();
-  }, [view]);
+    if (!wallet.publicKey) return;
+    if (dStatus !== "done" && bStatus !== "done" && manageStatus !== "done") {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      refreshPool();
+    }, 2200);
+    return () => window.clearTimeout(timer);
+  }, [wallet.publicKey, dStatus, bStatus, manageStatus, refreshPool]);
 
   useEffect(() => {
-    if (bStatus === "done" && program) {
-      fetchVaults();
-      if (fillResult && bSig && selectedVault) {
+    if (bStatus === "done" && program && fillResult && txSig) {
+      if (!purchases.some((p) => p.txSig === txSig)) {
         setPurchases((prev) => [
           {
-            vaultKey: selectedVault.pubkey.toBase58(),
             filledAmount: fillResult.filledAmount,
             cost: fillResult.cost,
-            txSig: bSig,
+            txSig,
             timestamp: Date.now(),
           },
           ...prev,
         ]);
       }
     }
-  }, [bStatus]);
+  }, [bStatus, fillResult, txSig, program, purchases]);
 
   const handleDeposit = () => {
     if (!provider || !depositSol || !priceUsdc) return;
@@ -403,44 +308,12 @@ export default function DarkPool() {
   };
 
   const handleBuy = () => {
-    if (!provider || !selectedVault || !buyAmtSol || !maxPriceUsdc) return;
-    submitBuy({
-      slicerParentKey: selectedVault.pubkey,
+    if (!provider || !buyAmtSol || !maxPriceUsdc) return;
+    buy({
       amountRequested: BigInt(Math.round(parseFloat(buyAmtSol) * 1e9)),
       maxPrice: BigInt(Math.round(parseFloat(maxPriceUsdc) * 1e6)),
     });
   };
-
-  const myVault = getParentPda();
-  const [myVaultEntry, setMyVaultEntry] = useState<VaultEntry | null>(null);
-
-  useEffect(() => {
-    if (!program || !myVault) return;
-    const fetchMyVault = async () => {
-      try {
-        const acc = await (program.account as any).slicerParent.fetch(myVault);
-        if (!acc.isWithdrawn) {
-          setMyVaultEntry({
-            pubkey: myVault,
-            owner: acc.owner,
-            totalDeposit: BigInt(acc.totalDeposit.toString()),
-            remainingBalance: BigInt(acc.remainingBalance.toString()),
-            isWithdrawn: acc.isWithdrawn,
-            urgencyLevel: acc.urgencyLevel,
-            filledAmount: getFilledAmount(
-              BigInt(acc.totalDeposit.toString()),
-              BigInt(acc.remainingBalance.toString())
-            ),
-          });
-        } else {
-          setMyVaultEntry(null);
-        }
-      } catch {
-        setMyVaultEntry(null);
-      }
-    };
-    fetchMyVault();
-  }, [program, myVault, dStatus, withdrawing]);
 
   const depositBusy = ["sending", "waiting", "encrypting"].includes(dStatus);
   const buyBusy = [
@@ -450,30 +323,45 @@ export default function DarkPool() {
     "finalizing",
     "settling",
   ].includes(bStatus);
-  const openLiquidity = vaults.reduce(
-    (sum, vault) => sum + vault.remainingBalance,
-    0n
-  );
-  const filledLiquidity = vaults.reduce(
-    (sum, vault) => sum + vault.filledAmount,
-    0n
-  );
+  const manageBusy = ["sending", "waiting", "encrypting"].includes(manageStatus);
   const filledOrders = purchases.filter((p) => p.filledAmount > 0n).length;
   const walletState = wallet.publicKey ? shortKey(wallet.publicKey) : "—";
+  const mySlot = poolSnapshot?.mySlot ?? null;
+  const myCredit = poolSnapshot?.myCredit ?? 0n;
   const copyUsdcMint = () => navigator.clipboard.writeText(USDC_MINT.toBase58());
+  const activeSlots = poolSnapshot?.activeSlots ?? 0;
+  const hasLiquidity = activeSlots > 0;
+  const totalFilled = purchases.reduce((sum, p) => sum + p.filledAmount, 0n);
+  const poolState = !wallet.publicKey
+    ? "OFFLINE"
+    : loadingPool
+    ? "SYNCING"
+    : !poolSnapshot
+    ? "UNOPENED"
+    : poolSnapshot.isMatching
+    ? "MATCHING"
+    : "READY";
+  const buyButtonText = !wallet.publicKey
+    ? "Connect Wallet First"
+    : !hasLiquidity
+    ? "Waiting for Liquidity"
+    : buyBusy
+    ? "Processing"
+    : "Encrypt and Route Buy";
+  const depositButtonText = !wallet.publicKey
+    ? "Connect Wallet First"
+    : depositBusy
+    ? "Processing"
+    : "Encrypt and Add Liquidity";
 
   return (
     <main className="darkpool-shell">
-      <header className="top-nav">
-        <div className="top-nav-inner">
-          <button
-            className="wordmark"
-            onClick={() => setView("market")}
-            aria-label="ArcSlicer home"
-          >
+      <section className="private-hero">
+        <div className="hero-topline">
+          <div className="wordmark hero-wordmark" aria-label="ArcSlicer">
             <span>ARC</span>
             <strong>SLICER</strong>
-          </button>
+          </div>
 
           <div className="network-pill">
             <IconStatusDot />
@@ -487,55 +375,53 @@ export default function DarkPool() {
             </div>
           </div>
         </div>
-      </header>
 
-      <section className="stats-strip" aria-label="Market status">
-        <div className="stat-cell">
-          <span>Live vaults</span>
-          <strong>{fmtStatNumber(vaults.length)}</strong>
-        </div>
-        <div className="stat-cell">
-          <span>Open SOL</span>
-          <strong>{fmtStatSol(openLiquidity)}</strong>
-        </div>
-        <div className="stat-cell">
-          <span>Filled SOL</span>
-          <strong>{fmtStatSol(filledLiquidity)}</strong>
-        </div>
-        <div className="stat-cell">
-          <span>Session fills</span>
-          <strong>{fmtStatNumber(filledOrders)}</strong>
-        </div>
-        <div className="stat-cell">
-          <span>Wallet</span>
-          <strong>{walletState}</strong>
-        </div>
-      </section>
+        <div className="hero-layout">
+          <div className="hero-copy">
+            <span className="hero-kicker">Private Solana Execution</span>
+            <h1>Buy and sell SOL without exposing price intent.</h1>
+            <p>
+              Sellers add hidden liquidity. Buyers submit one encrypted max-price
+              order. Arcium privately matches the pool, then Solana settles only
+              the final executable result.
+            </p>
+          </div>
 
-      <nav className="tab-strip">
-        <div className="tab-list" aria-label="ArcSlicer views">
-          {(
-            [
-              { key: "market", label: "Market" },
-              { key: "sell", label: "Sell SOL" },
-              { key: "manage", label: "My Vault" },
-              { key: "history", label: "History" },
-            ] as { key: View; label: string }[]
-          ).map(({ key, label }) => (
-            <button
-              key={key}
-              className={`tab-button ${view === key ? "active" : ""}`}
-              onClick={() => setView(key)}
-            >
-              <span>{label}</span>
-              {key === "history" && purchases.length > 0 && (
-                <span className="tab-count">{purchases.length}</span>
-              )}
-            </button>
-          ))}
+          <div className="hero-status-card">
+            <span>Pool status</span>
+            <strong>{poolState}</strong>
+            <p>
+              {hasLiquidity
+                ? "Private liquidity is ready for encrypted buy orders."
+                : "Add hidden sell liquidity before buyers can execute."}
+            </p>
+          </div>
         </div>
 
-        <div className="funds-tools">
+        <div className="hero-stats" aria-label="Private pool status">
+          <div className="stat-cell">
+            <span>Private slots</span>
+            <strong>{fmtStatNumber(activeSlots)}</strong>
+          </div>
+          <div className="stat-cell">
+            <span>Pool state</span>
+            <strong>{poolState}</strong>
+          </div>
+          <div className="stat-cell">
+            <span>Filled SOL</span>
+            <strong>{totalFilled === 0n ? "—" : fmtSol(totalFilled)}</strong>
+          </div>
+          <div className="stat-cell">
+            <span>Session fills</span>
+            <strong>{fmtStatNumber(filledOrders)}</strong>
+          </div>
+          <div className="stat-cell">
+            <span>Wallet</span>
+            <strong>{walletState}</strong>
+          </div>
+        </div>
+
+        <div className="funds-tools hero-funds">
           <button
             className="ghost-button"
             onClick={requestAirdrop}
@@ -555,414 +441,325 @@ export default function DarkPool() {
           </div>
           {faucetLog && <span className="faucet-log">{faucetLog}</span>}
         </div>
-      </nav>
+      </section>
 
       <div className="app-content">
-        {view === "market" && (
-          <section className="market-view">
-            <div className="section-header">
+        <section className="workspace-grid">
+          <section className="trade-panel buy-panel primary-trade">
+            <div className="panel-title-row">
               <div>
-                <h2>Active Vaults</h2>
-                <p>
-                  Seller vaults are public price floors stay encrypted. Choose
-                  a vault and submit your max USDC price.
-                </p>
+                <span>Buyer intent</span>
+                <h3>Buy from the private pool</h3>
               </div>
               <button
                 className="refresh-btn"
-                onClick={fetchVaults}
-                disabled={loadingVaults}
+                onClick={refreshPool}
+                disabled={loadingPool}
               >
-                <IconRefresh spinning={loadingVaults} />
-                <span>{loadingVaults ? "Loading" : "Refresh"}</span>
+                <IconRefresh spinning={loadingPool} />
+                <span>{loadingPool ? "Loading" : "Refresh"}</span>
               </button>
             </div>
 
+            <div className="panel-note">
+              <IconLock />
+              <span>
+                Enter the SOL you want and your max USDC price. The order is
+                encrypted locally, routed inside Arcium, and returned as one
+                blended execution.
+              </span>
+            </div>
+
             {!wallet.publicKey && (
-              <div className="empty-state">
-                <IconVaultEmpty />
-                <strong>Connect wallet to view vaults</strong>
-                <span>Market depth loads after wallet connection.</span>
+              <div className="inline-alert">
+                Connect a wallet to submit private buy orders.
               </div>
             )}
 
-            {wallet.publicKey && loadingVaults && vaults.length === 0 && (
-              <div className="vault-rows" aria-label="Loading vaults">
-                {[0, 1, 2].map((item) => (
-                  <div key={item} className="vault-row skeleton-row" />
-                ))}
+            {wallet.publicKey && !hasLiquidity && (
+              <div className="inline-alert warning">
+                No hidden sell liquidity is active yet. Add liquidity on the
+                right, then this buy form will execute against the pool.
               </div>
             )}
 
-            {wallet.publicKey && !loadingVaults && vaults.length === 0 && (
-              <div className="empty-state">
-                <IconVaultEmpty />
-                <strong>No active vaults</strong>
-                <button className="empty-link" onClick={() => setView("sell")}>
-                  <span>Create a vault in Sell SOL</span>
-                  <IconArrow />
-                </button>
+            {wallet.publicKey && poolSnapshot?.isMatching && (
+              <div className="inline-alert warning">
+                The pool is matching another order. Wait a moment and refresh.
               </div>
             )}
 
-            {vaults.length > 0 && (
-              <div className="vault-rows">
-                {vaults.map((vault) => {
-                  const isOwn =
-                    wallet.publicKey?.toBase58() === vault.owner.toBase58();
-                  const isActive =
-                    selectedVault?.pubkey.toBase58() === vault.pubkey.toBase58();
-                  const fillPct = getFillPct(
-                    vault.totalDeposit,
-                    vault.remainingBalance
-                  );
-                  return (
-                    <article
-                      key={vault.pubkey.toBase58()}
-                      className={`vault-row ${isOwn ? "own-vault" : ""} ${
-                        isActive ? "selected" : ""
-                      }`}
-                      onClick={() => {
-                        if (isOwn) return;
-                        setSelectedVault(isActive ? null : vault);
-                        if (!isActive) {
-                          setBuyAmtSol("");
-                          setMaxPriceUsdc("");
-                        }
-                      }}
-                    >
-                      <div className="vault-row-main">
-                        <span>{isOwn ? "Your vault" : shortKey(vault.pubkey)}</span>
-                        <strong>{fmtSol(vault.remainingBalance)}</strong>
-                      </div>
+            <div className="field-stack two-field-grid">
+              <label className="control-field">
+                <span>SOL amount to buy</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={buyAmtSol}
+                  onChange={(e) => setBuyAmtSol(e.target.value)}
+                  placeholder="e.g. 1"
+                />
+              </label>
+              <label className="control-field">
+                <span>Max price (USDC per SOL)</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={maxPriceUsdc}
+                  onChange={(e) => setMaxPriceUsdc(e.target.value)}
+                  placeholder="e.g. 155.00"
+                />
+              </label>
+            </div>
 
-                      <div className="vault-row-status">
-                        <span className="live-badge">
-                          <IconStatusDot />
-                          Live
-                        </span>
-                        <code>{fillPct}% filled</code>
-                      </div>
+            <button
+              className="action-button buyer-action"
+              onClick={handleBuy}
+              disabled={
+                !wallet.publicKey ||
+                !buyAmtSol ||
+                !maxPriceUsdc ||
+                buyBusy ||
+                !hasLiquidity ||
+                Boolean(poolSnapshot?.isMatching)
+              }
+            >
+              {buyButtonText}
+            </button>
 
-                      <div className="vault-row-meta">
-                        <span>Total</span>
-                        <strong>{fmtSol(vault.totalDeposit)}</strong>
-                      </div>
+            {bStatus !== "idle" && <StepTracker status={bStatus} error={bErr} />}
 
-                      <div
-                        className="vault-fill"
-                        style={
-                          { "--fill-pct": `${fillPct}%` } as React.CSSProperties
-                        }
-                      >
-                        <span />
-                      </div>
-
-                      {isOwn ? (
-                        <div className="vault-row-actions">
-                          <button
-                            className="ghost-button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setView("manage");
-                            }}
-                          >
-                            Manage
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="vault-row-affordance" aria-hidden="true">
-                          <IconArrow />
-                        </div>
-                      )}
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-
-            {selectedVault && (
-              <div className="buy-panel">
-                <div className="panel-title-row">
-                  <div>
-                    <span>Private bid</span>
-                    <h3>{shortKey(selectedVault.pubkey)}</h3>
+            {fillResult && (
+              <div className="fill-result">
+                <div
+                  className={`fill-result-header ${
+                    fillResult.filledAmount > 0n ? "filled" : "no-fill"
+                  }`}
+                >
+                  {fillResult.filledAmount > 0n ? (
+                    <>
+                      <IconCheck /> Order filled
+                    </>
+                  ) : (
+                    <>No fill. Your max price was below the seller floor.</>
+                  )}
+                </div>
+                {fillResult.filledAmount > 0n && (
+                  <div className="fill-metrics">
+                    <div>
+                      <small>You received</small>
+                      <strong>{fmtSol(fillResult.filledAmount)}</strong>
+                    </div>
+                    <div>
+                      <small>Cost</small>
+                      <strong>{fmtCost(fillResult.cost)}</strong>
+                    </div>
+                    <div>
+                      <small>Effective price</small>
+                      <strong>
+                        {fmtEffectivePrice(
+                          fillResult.cost,
+                          fillResult.filledAmount
+                        )}
+                      </strong>
+                    </div>
                   </div>
-                  <button
-                    className="icon-button"
-                    onClick={() => setSelectedVault(null)}
-                    aria-label="Close buy panel"
-                  >
-                    <IconClose />
-                  </button>
-                </div>
-                <div className="panel-note">
-                  <IconLock />
-                  <span>Encrypted price check through Arcium before settlement.</span>
-                </div>
-                <div className="available-info">
-                  <span>Available</span>
-                  <strong>{fmtSol(selectedVault.remainingBalance)}</strong>
-                </div>
-                <div className="field-stack">
-                  <label className="control-field">
-                    <span>SOL amount to buy</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={buyAmtSol}
-                      onChange={(e) => setBuyAmtSol(e.target.value)}
-                      placeholder={`up to ${(
-                        Number(selectedVault.remainingBalance) / 1e9
-                      ).toFixed(3)}`}
-                    />
-                  </label>
-                  <label className="control-field">
-                    <span>Max price (USDC per SOL)</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={maxPriceUsdc}
-                      onChange={(e) => setMaxPriceUsdc(e.target.value)}
-                      placeholder="e.g. 155.00"
-                    />
-                  </label>
-                </div>
-                <button
-                  className="action-button buyer-action"
-                  onClick={handleBuy}
-                  disabled={
-                    !wallet.publicKey || !buyAmtSol || !maxPriceUsdc || buyBusy
+                )}
+                {txSig && <TxLink signature={txSig} />}
+              </div>
+            )}
+          </section>
+
+          <section className="trade-panel seller-panel">
+            <div className="panel-title-row">
+              <div>
+                <span>Seller liquidity</span>
+                <h3>Add a hidden sell order</h3>
+              </div>
+            </div>
+
+            <div className="panel-note">
+              <IconLock />
+              <span>
+                Deposit SOL and set your minimum acceptable price. Buyers see
+                pool availability, not your exact price floor.
+              </span>
+            </div>
+
+            {mySlot !== null && (
+              <div className="inline-alert success">
+                You already have an active hidden slot. Manage it below before
+                adding another order.
+              </div>
+            )}
+
+            <div className="field-stack">
+              <label className="control-field">
+                <span>SOL to deposit</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  value={depositSol}
+                  onChange={(e) => setDepositSol(e.target.value)}
+                  placeholder="e.g. 2"
+                />
+              </label>
+              <label className="control-field">
+                <span>Minimum price (USDC per SOL)</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={priceUsdc}
+                  onChange={(e) => setPriceUsdc(e.target.value)}
+                  placeholder="e.g. 150.00"
+                />
+              </label>
+              <label className="control-field">
+                <span>Fill urgency</span>
+                <select
+                  value={urgency}
+                  onChange={(e) =>
+                    setUrgency(Number(e.target.value) as 1 | 2 | 3)
                   }
                 >
-                  {buyBusy ? "Processing" : "Encrypt and Submit Order"}
-                </button>
-                {bStatus !== "idle" && (
-                  <StepTracker status={bStatus} error={bErr} />
-                )}
-                {fillResult && (
-                  <div className="fill-result">
-                    <div
-                      className={`fill-result-header ${
-                        fillResult.filledAmount > 0n ? "filled" : "no-fill"
-                      }`}
-                    >
-                      {fillResult.filledAmount > 0n ? (
-                        <>
-                          <IconCheck /> Order filled
-                        </>
-                      ) : (
-                        <>No fill. Your max price was below the seller floor.</>
-                      )}
-                    </div>
-                    {fillResult.filledAmount > 0n && (
-                      <div className="fill-metrics">
-                        <div>
-                          <small>You received</small>
-                          <strong>{fmtSol(fillResult.filledAmount)}</strong>
-                        </div>
-                        <div>
-                          <small>Cost</small>
-                          <strong>{fmtCost(fillResult.cost)}</strong>
-                        </div>
-                        <div>
-                          <small>Effective price</small>
-                          <strong>
-                            {fmtEffectivePrice(
-                              fillResult.cost,
-                              fillResult.filledAmount
-                            )}
-                          </strong>
-                        </div>
-                      </div>
-                    )}
-                    {bSig && <TxLink signature={bSig} />}
-                  </div>
-                )}
-              </div>
-            )}
-          </section>
-        )}
-
-        {view === "sell" && (
-          <section className="sell-view">
-            <div className="section-header">
-              <div>
-                <h2>Create Vault</h2>
-                <p>
-                  Deposit SOL and set a hidden floor. Buyers see size and fill
-                  status, not your price.
-                </p>
-              </div>
+                  <option value={1}>Stealth: slower, quieter</option>
+                  <option value={2}>Standard: balanced</option>
+                  <option value={3}>Aggressive: fastest fill</option>
+                </select>
+              </label>
             </div>
-            <div className="trade-panel seller-panel">
-              <div className="field-stack">
-                <label className="control-field">
-                  <span>SOL to deposit</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={depositSol}
-                    onChange={(e) => setDepositSol(e.target.value)}
-                    placeholder="e.g. 2"
-                  />
-                </label>
-                <label className="control-field">
-                  <span>Minimum price (USDC per SOL)</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={priceUsdc}
-                    onChange={(e) => setPriceUsdc(e.target.value)}
-                    placeholder="e.g. 150.00"
-                  />
-                </label>
-                <label className="control-field">
-                  <span>Fill urgency</span>
-                  <select
-                    value={urgency}
-                    onChange={(e) =>
-                      setUrgency(Number(e.target.value) as 1 | 2 | 3)
+            <button
+              className="action-button seller-action"
+              onClick={handleDeposit}
+              disabled={
+                !wallet.publicKey ||
+                !depositSol ||
+                !priceUsdc ||
+                depositBusy ||
+                mySlot !== null
+              }
+            >
+              {mySlot !== null ? "Slot Already Active" : depositButtonText}
+            </button>
+            {dStatus !== "idle" && <StepTracker status={dStatus} error={dErr} />}
+            {dStatus === "done" && (
+              <div className="vault-created">
+                <strong>
+                  <IconCheck /> Hidden order added
+                </strong>
+                <p>
+                  The order was queued into the private pool. The My Position
+                  panel refreshes automatically, and you can also refresh it
+                  manually.
+                </p>
+                <div className="vault-address-card">
+                  <span>Pool address</span>
+                  <code
+                    onClick={() =>
+                      poolSnapshot?.poolBook &&
+                      navigator.clipboard.writeText(poolSnapshot.poolBook.toBase58())
                     }
                   >
-                    <option value={1}>Stealth: slower, quieter</option>
-                    <option value={2}>Standard: balanced</option>
-                    <option value={3}>Aggressive: fastest fill</option>
-                  </select>
-                </label>
+                    {poolSnapshot
+                      ? poolSnapshot.poolBook.toBase58()
+                      : "Initializing"}
+                  </code>
+                  <small>Click to copy</small>
+                </div>
+                {txSig && <TxLink signature={txSig} />}
+              </div>
+            )}
+          </section>
+        </section>
+
+        <section className="lower-grid">
+          <section className="manage-card position-card">
+            <div className="panel-title-row">
+              <div>
+                <span>My position</span>
+                <h3>Your hidden pool slot</h3>
               </div>
               <button
-                className="action-button seller-action"
-                onClick={handleDeposit}
-                disabled={
-                  !wallet.publicKey || !depositSol || !priceUsdc || depositBusy
-                }
+                className="refresh-btn"
+                onClick={refreshPool}
+                disabled={loadingPool}
               >
-                {depositBusy ? "Processing" : "Encrypt and Deposit SOL"}
+                <IconRefresh spinning={loadingPool} />
+                <span>{loadingPool ? "Loading" : "Refresh"}</span>
               </button>
-              {dStatus !== "idle" && (
-                <StepTracker status={dStatus} error={dErr} />
-              )}
-              {dStatus === "done" && myVault && (
-                <div className="vault-created">
-                  <strong>
-                    <IconCheck /> Vault created
-                  </strong>
-                  <p>
-                    Visible to buyers in Market. Track fills and withdraw in My
-                    Vault.
-                  </p>
-                  <div className="vault-address-card">
-                    <span>Vault address</span>
-                    <code
-                      onClick={() =>
-                        navigator.clipboard.writeText(myVault.toBase58())
-                      }
-                    >
-                      {myVault.toBase58()}
-                    </code>
-                    <small>Click to copy</small>
-                  </div>
-                  {dSig && <TxLink signature={dSig} />}
-                </div>
-              )}
             </div>
-          </section>
-        )}
 
-        {view === "manage" && (
-          <section className="manage-view">
-            <div className="section-header">
-              <div>
-                <h2>My Vault</h2>
-                <p>Track fill status and withdraw unsold SOL.</p>
-              </div>
-            </div>
             {!wallet.publicKey && (
-              <div className="empty-state">
+              <div className="empty-state compact-empty">
                 <IconVaultEmpty />
                 <strong>Connect wallet</strong>
-                <span>Your seller vault appears here.</span>
+                <span>Your encrypted sell slot appears here.</span>
               </div>
             )}
-            {wallet.publicKey && !myVaultEntry && (
-              <div className="empty-state">
-                <IconVaultEmpty />
-                <strong>No active vault</strong>
-                <button className="empty-link" onClick={() => setView("sell")}>
-                  <span>Create a vault in Sell SOL</span>
-                  <IconArrow />
-                </button>
-              </div>
-            )}
-            {myVaultEntry &&
-              (() => {
-                const fillPct = getFillPct(
-                  myVaultEntry.totalDeposit,
-                  myVaultEntry.remainingBalance
-                );
-                return (
-                  <div className="manage-card">
-                    <div className="manage-row">
-                      <span>Total deposited</span>
-                      <strong>{fmtSol(myVaultEntry.totalDeposit)}</strong>
-                    </div>
-                    <div className="manage-row">
-                      <span>Remaining</span>
-                      <strong>{fmtSol(myVaultEntry.remainingBalance)}</strong>
-                    </div>
-                    <div
-                      className="vault-fill manage-fill"
-                      style={
-                        { "--fill-pct": `${fillPct}%` } as React.CSSProperties
-                      }
-                    >
-                      <span />
-                    </div>
-                    <div className="panel-note">
-                      <IconLock /> Your price floor is encrypted under the Arcium
-                      MXE key.
-                    </div>
-                    <button
-                      className="action-button withdraw-action"
-                      disabled={
-                        myVaultEntry.remainingBalance === 0n || withdrawing
-                      }
-                      onClick={async () => {
-                        setWithdrawing(true);
-                        try {
-                          await withdraw();
-                        } finally {
-                          setWithdrawing(false);
-                        }
-                      }}
-                    >
-                      {myVaultEntry.remainingBalance === 0n
-                        ? "Nothing to Withdraw"
-                        : withdrawing
-                        ? "Withdrawing"
-                        : `Withdraw ${fmtSol(myVaultEntry.remainingBalance)}`}
-                    </button>
-                  </div>
-                );
-              })()}
-          </section>
-        )}
 
-        {view === "history" && (
-          <section className="history-view">
-            <div className="section-header">
+            {wallet.publicKey && mySlot === null && (
+              <div className="empty-state compact-empty">
+                <IconVaultEmpty />
+                <strong>No active hidden slot</strong>
+                <span>
+                  Add sell liquidity above. If you just added it, press refresh
+                  after Arcium finalizes.
+                </span>
+              </div>
+            )}
+
+            {wallet.publicKey && mySlot !== null && (
+              <>
+                <div className="manage-row">
+                  <span>Private slot</span>
+                  <strong>#{mySlot + 1}</strong>
+                </div>
+                <div className="manage-row">
+                  <span>Settled USDC credit</span>
+                  <strong>{myCredit === 0n ? "—" : fmtCost(myCredit)}</strong>
+                </div>
+                <div className="panel-note">
+                  <IconLock /> Your remaining SOL and floor price stay encrypted
+                  in the pool book until you cancel or a trade settles.
+                </div>
+                <button
+                  className="action-button withdraw-action"
+                  disabled={myCredit === 0n || manageBusy}
+                  onClick={() => withdrawCredit(mySlot)}
+                >
+                  {myCredit === 0n
+                    ? "No USDC Credit"
+                    : manageBusy
+                    ? "Processing"
+                    : `Withdraw ${fmtCost(myCredit)}`}
+                </button>
+                <button
+                  className="ghost-button"
+                  disabled={manageBusy}
+                  onClick={() => cancelAndWithdraw(mySlot)}
+                >
+                  Cancel order and withdraw SOL
+                </button>
+                {manageStatus !== "idle" && (
+                  <StepTracker status={manageStatus} error={manageError} />
+                )}
+              </>
+            )}
+          </section>
+
+          <section className="history-card">
+            <div className="panel-title-row">
               <div>
-                <h2>Purchase History</h2>
-                <p>Orders filled in this browser session.</p>
+                <span>Session history</span>
+                <h3>Private fills</h3>
               </div>
             </div>
             {purchases.length === 0 && (
-              <div className="empty-state">
+              <div className="empty-state compact-empty">
                 <IconVaultEmpty />
                 <strong>No purchases yet</strong>
                 <span>Filled orders will appear here.</span>
@@ -974,7 +771,7 @@ export default function DarkPool() {
                   <div key={i} className="history-row">
                     <div className="history-row-top">
                       <span className="history-vault">
-                        Vault {shortKey(p.vaultKey)}
+                        Private pool fill
                       </span>
                       <span className="history-time">
                         {new Date(p.timestamp).toLocaleTimeString()}
@@ -1006,7 +803,7 @@ export default function DarkPool() {
               </div>
             )}
           </section>
-        )}
+        </section>
       </div>
 
       <footer className="app-footer">

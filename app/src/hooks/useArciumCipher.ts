@@ -75,6 +75,30 @@ export function useArciumCipher(
     []
   );
 
+  const encryptU64Array = useCallback((values: bigint[]): EncryptedU64Pair & { ciphertexts: number[][] } => {
+    if (!sessionRef.current)
+      throw new Error("Encryption is not ready yet. Please try again.");
+    const { cipher, publicKey } = sessionRef.current;
+    const rawNonce = randomBytes(16);
+    const ciphertexts = cipher.encrypt(values, rawNonce).map((ciphertext) =>
+      Array.from(new Uint8Array(Buffer.from(ciphertext)).slice(0, 32))
+    );
+    const buf = Buffer.from(rawNonce);
+    const lo = buf.readBigUInt64LE(0);
+    const hi = buf.readBigUInt64LE(8);
+    const nonce = new anchor.BN(
+      (hi * BigInt("18446744073709551616") + lo).toString()
+    );
+    return {
+      ciphertext0: ciphertexts[0],
+      ciphertext1: ciphertexts[1],
+      ciphertexts,
+      pubKey: Array.from(publicKey),
+      nonce,
+      rawNonce,
+    };
+  }, []);
+
   const decryptU64Pair = useCallback(
     (ct0: number[], ct1: number[], nonce: number[]): [bigint, bigint] => {
       if (!sessionRef.current) throw new Error("Encryption is not ready yet.");
@@ -109,6 +133,7 @@ export function useArciumCipher(
     ready,
     error,
     encryptU64Pair,
+    encryptU64Array,
     decryptU64Pair,
     decryptU64Triple,
   };

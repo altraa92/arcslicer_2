@@ -73,6 +73,10 @@ async function main() {
     { label: "init_vault_balance", method: "initVaultBalanceCompDef" },
     { label: "match_slice_v2", method: "initMatchSliceCompDef" },
     { label: "reveal_fill", method: "initRevealFillCompDef" },
+    { label: "init_pool_book", method: "initPoolBookCompDef" },
+    { label: "add_pool_order", method: "initAddPoolOrderCompDef" },
+    { label: "match_pool_v2", method: "initMatchPoolV2CompDef" },
+    { label: "cancel_pool_order", method: "initCancelPoolOrderCompDef" },
   ];
 
   for (let i = 0; i < defs.length; i++) {
@@ -83,7 +87,7 @@ async function main() {
     );
 
     try {
-      console.log(`${i + 1}/3 Initializing ${label} comp def...`);
+      console.log(`${i + 1}/${defs.length} Initializing ${label} comp def...`);
       const existing = await connection.getAccountInfo(compDefAccount, {
         commitment: "confirmed",
       });
