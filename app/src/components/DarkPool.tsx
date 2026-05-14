@@ -41,6 +41,8 @@ const shortKey = (k: PublicKey | string) => {
   return s.slice(0, 5) + "..." + s.slice(-4);
 };
 
+type View = "buy" | "sell" | "position" | "history";
+
 const IconFaucet = () => (
   <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
     <path
@@ -211,6 +213,7 @@ export default function DarkPool() {
 
   const [provider, setProvider] = useState<anchor.AnchorProvider | null>(null);
   const [program, setProgram] = useState<anchor.Program<any> | null>(null);
+  const [view, setView] = useState<View>("buy");
   const [depositSol, setDepositSol] = useState("");
   const [priceUsdc, setPriceUsdc] = useState("");
   const [urgency, setUrgency] = useState<1 | 2 | 3>(2);
@@ -353,6 +356,12 @@ export default function DarkPool() {
     : depositBusy
     ? "Processing"
     : "Encrypt and Add Liquidity";
+  const tabs: { key: View; label: string; count?: string }[] = [
+    { key: "buy", label: "Buy" },
+    { key: "sell", label: "Sell SOL" },
+    { key: "position", label: "My Position", count: mySlot !== null ? `${mySlot + 1}` : undefined },
+    { key: "history", label: "History", count: purchases.length ? purchases.length.toString() : undefined },
+  ];
 
   return (
     <main className="darkpool-shell">
@@ -379,7 +388,11 @@ export default function DarkPool() {
         <div className="hero-layout">
           <div className="hero-copy">
             <span className="hero-kicker">Private Solana Execution</span>
-            <h1>Buy and sell SOL without exposing price intent.</h1>
+            <h1>
+              <span>Buy and sell SOL</span>
+              <span>without exposing</span>
+              <span>price intent.</span>
+            </h1>
             <p>
               Sellers add hidden liquidity. Buyers submit one encrypted max-price
               order. Arcium privately matches the pool, then Solana settles only
@@ -390,6 +403,10 @@ export default function DarkPool() {
           <div className="hero-status-card">
             <span>Pool status</span>
             <strong>{poolState}</strong>
+            <div className="status-pair">
+              <code>{fmtStatNumber(activeSlots)}</code>
+              <small>hidden seller slots</small>
+            </div>
             <p>
               {hasLiquidity
                 ? "Private liquidity is ready for encrypted buy orders."
@@ -398,53 +415,46 @@ export default function DarkPool() {
           </div>
         </div>
 
-        <div className="hero-stats" aria-label="Private pool status">
-          <div className="stat-cell">
-            <span>Private slots</span>
-            <strong>{fmtStatNumber(activeSlots)}</strong>
-          </div>
-          <div className="stat-cell">
-            <span>Pool state</span>
-            <strong>{poolState}</strong>
-          </div>
-          <div className="stat-cell">
-            <span>Filled SOL</span>
-            <strong>{totalFilled === 0n ? "—" : fmtSol(totalFilled)}</strong>
-          </div>
-          <div className="stat-cell">
-            <span>Session fills</span>
-            <strong>{fmtStatNumber(filledOrders)}</strong>
-          </div>
-          <div className="stat-cell">
-            <span>Wallet</span>
-            <strong>{walletState}</strong>
-          </div>
-        </div>
+        <div className="action-bar">
+          <nav className="tab-list" aria-label="ArcSlicer views">
+            {tabs.map((tab) => (
+              <button
+                key={tab.key}
+                className={`tab-button ${view === tab.key ? "active" : ""}`}
+                onClick={() => setView(tab.key)}
+              >
+                <span>{tab.label}</span>
+                {tab.count && <span className="tab-count">{tab.count}</span>}
+              </button>
+            ))}
+          </nav>
 
-        <div className="funds-tools hero-funds">
-          <button
-            className="ghost-button"
-            onClick={requestAirdrop}
-            disabled={isDropping || !wallet.publicKey}
-            title="Request devnet SOL and 1000 USDC"
-          >
-            <IconFaucet />
-            <span>{isDropping ? "Funding" : "Devnet Funds"}</span>
-          </button>
-          <div className="mint-chip">
-            <span>Devnet USDC</span>
-            <code>{shortKey(USDC_MINT)}</code>
-            <button onClick={copyUsdcMint} title="Copy mint">
-              <IconCopy />
-              <span>copy mint</span>
+          <div className="funds-tools hero-funds">
+            <button
+              className="ghost-button"
+              onClick={requestAirdrop}
+              disabled={isDropping || !wallet.publicKey}
+              title="Request devnet SOL and 1000 USDC"
+            >
+              <IconFaucet />
+              <span>{isDropping ? "Funding" : "Devnet Funds"}</span>
             </button>
+            <div className="mint-chip">
+              <span>Devnet USDC</span>
+              <code>{shortKey(USDC_MINT)}</code>
+              <button onClick={copyUsdcMint} title="Copy mint">
+                <IconCopy />
+                <span>copy mint</span>
+              </button>
+            </div>
+            {faucetLog && <span className="faucet-log">{faucetLog}</span>}
           </div>
-          {faucetLog && <span className="faucet-log">{faucetLog}</span>}
         </div>
       </section>
 
       <div className="app-content">
-        <section className="workspace-grid">
+        {view === "buy" && (
+          <section className="view-grid buy-view">
           <section className="trade-panel buy-panel primary-trade">
             <div className="panel-title-row">
               <div>
@@ -572,6 +582,31 @@ export default function DarkPool() {
             )}
           </section>
 
+          <aside className="side-panel pool-brief">
+            <span>Private pool</span>
+            <strong>{hasLiquidity ? "Ready for buyers" : "Waiting for sellers"}</strong>
+            <div className="side-metric">
+              <small>Hidden slots</small>
+              <code>{fmtStatNumber(activeSlots)}</code>
+            </div>
+            <div className="side-metric">
+              <small>Pool state</small>
+              <code>{poolState}</code>
+            </div>
+            <div className="side-metric">
+              <small>This session filled</small>
+              <code>{totalFilled === 0n ? "—" : fmtSol(totalFilled)}</code>
+            </div>
+            <p>
+              Buyers submit one encrypted intent. Arcium routes internally
+              across hidden seller slots and returns a single blended result.
+            </p>
+          </aside>
+        </section>
+        )}
+
+        {view === "sell" && (
+          <section className="view-grid sell-view">
           <section className="trade-panel seller-panel">
             <div className="panel-title-row">
               <div>
@@ -674,9 +709,39 @@ export default function DarkPool() {
               </div>
             )}
           </section>
-        </section>
 
-        <section className="lower-grid">
+          <aside className="side-panel seller-brief">
+            <span>Seller progress</span>
+            <strong>{mySlot !== null ? `Slot #${mySlot + 1} active` : "No slot yet"}</strong>
+            <div className="progress-list">
+              <div className={`progress-line ${mySlot !== null ? "done" : "active"}`}>
+                <IconCheck />
+                <span>Encrypt order locally</span>
+              </div>
+              <div className={`progress-line ${mySlot !== null ? "done" : ""}`}>
+                <IconStatusDot />
+                <span>Join private pool</span>
+              </div>
+              <div className={`progress-line ${myCredit > 0n ? "done" : "waiting"}`}>
+                <IconStatusDot />
+                <span>Earn USDC as buyers cross</span>
+              </div>
+            </div>
+            <p>
+              Remaining SOL and your floor price are encrypted. Your visible
+              seller progress is slot status and withdrawable USDC credit.
+            </p>
+            {mySlot !== null && (
+              <button className="ghost-button" onClick={() => setView("position")}>
+                Open My Position
+              </button>
+            )}
+          </aside>
+        </section>
+        )}
+
+        {view === "position" && (
+          <section className="view-grid position-view">
           <section className="manage-card position-card">
             <div className="panel-title-row">
               <div>
@@ -751,7 +816,38 @@ export default function DarkPool() {
             )}
           </section>
 
-          <section className="history-card">
+          <aside className="side-panel position-progress">
+            <span>Seller lifecycle</span>
+            <strong>{mySlot !== null ? "Live in the pool" : "Start with a sell order"}</strong>
+            <div className="progress-list">
+              <div className={`progress-line ${mySlot !== null ? "done" : "waiting"}`}>
+                <IconCheck />
+                <span>Slot opened</span>
+              </div>
+              <div className={`progress-line ${poolSnapshot?.isMatching ? "active" : "waiting"}`}>
+                <IconStatusDot />
+                <span>Private matching</span>
+              </div>
+              <div className={`progress-line ${myCredit > 0n ? "done" : "waiting"}`}>
+                <IconStatusDot />
+                <span>USDC credit available</span>
+              </div>
+            </div>
+            <div className="side-metric">
+              <small>Wallet</small>
+              <code>{walletState}</code>
+            </div>
+            <div className="side-metric">
+              <small>Withdrawable credit</small>
+              <code>{myCredit === 0n ? "—" : fmtCost(myCredit)}</code>
+            </div>
+          </aside>
+        </section>
+        )}
+
+        {view === "history" && (
+          <section className="history-view">
+            <section className="history-card">
             <div className="panel-title-row">
               <div>
                 <span>Session history</span>
@@ -802,8 +898,9 @@ export default function DarkPool() {
                 ))}
               </div>
             )}
+            </section>
           </section>
-        </section>
+        )}
       </div>
 
       <footer className="app-footer">
