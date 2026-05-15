@@ -617,7 +617,7 @@ export default function DarkPool() {
               className="ghost-button"
               onClick={requestAirdrop}
               disabled={isDropping || !wallet.publicKey}
-              title="Request devnet SOL and 1000 USDC"
+              title="Request devnet SOL and 10000 USDC"
             >
               <IconFaucet />
               <span>{isDropping ? "Funding" : "Devnet Funds"}</span>

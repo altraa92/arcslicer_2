@@ -16,7 +16,7 @@ import {
 import { sendAndConfirmTransaction } from "@solana/web3.js";
 import { USDC_MINT } from "../config/constants";
 
-const USDC_UNITS = 1000n;
+const USDC_UNITS = 10000n;
 
 const friendlySolAirdropError = (e: any) => {
   const message = e?.message ?? String(e ?? "");
@@ -72,7 +72,7 @@ export const useFaucet = () => {
   const requestAirdrop = async () => {
     if (!publicKey) return setFaucetLog("Connect wallet first.");
     setIsDropping(true);
-    setFaucetLog("Requesting SOL and 1000 USDC...");
+    setFaucetLog("Requesting SOL and 10000 USDC...");
 
     try {
       const secretKeyString = import.meta.env.VITE_FAUCET_SECRET_KEY;
@@ -123,8 +123,8 @@ export const useFaucet = () => {
       const sig = await sendAndConfirmTransaction(connection, tx, [funderKeypair]);
       setFaucetLog(
         solSent
-          ? `Done. 2 SOL and 1000 USDC sent. USDC tx: ${sig.slice(0, 8)}...`
-          : `1000 USDC sent. ${solMessage} USDC tx: ${sig.slice(0, 8)}...`
+          ? `Done. 2 SOL and 10000 USDC sent. USDC tx: ${sig.slice(0, 8)}...`
+          : `10000 USDC sent. ${solMessage} USDC tx: ${sig.slice(0, 8)}...`
       );
     } catch (e: any) {
       setFaucetLog(friendlyFaucetError(e));
