@@ -23,6 +23,13 @@ interface StoredPurchaseRecord {
   timestamp: number;
 }
 
+interface SellerPositionRecord {
+  slot: number;
+  depositedLamports: string;
+  fillBaselineLamports?: string;
+  timestamp: number;
+}
+
 const fmtSol = (n: bigint) =>
   (Number(n) / 1e9).toLocaleString(undefined, { maximumFractionDigits: 4 }) +
   " SOL";
@@ -83,6 +90,25 @@ const savePurchaseHistory = (
     purchaseHistoryKey(walletKey),
     JSON.stringify(stored)
   );
+};
+
+const sellerPositionKey = (walletKey: string) =>
+  `arcslicer:seller-position:${walletKey}`;
+
+const loadSellerPosition = (walletKey: string): SellerPositionRecord | null => {
+  try {
+    const raw = window.localStorage.getItem(sellerPositionKey(walletKey));
+    return raw ? (JSON.parse(raw) as SellerPositionRecord) : null;
+  } catch {
+    return null;
+  }
+};
+
+const saveSellerPosition = (
+  walletKey: string,
+  position: SellerPositionRecord
+) => {
+  window.localStorage.setItem(sellerPositionKey(walletKey), JSON.stringify(position));
 };
 
 type View = "buy" | "sell" | "position" | "history";
@@ -267,6 +293,10 @@ export default function DarkPool() {
   const [loadingPool, setLoadingPool] = useState(false);
 
   const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
+  const [sellerPosition, setSellerPosition] =
+    useState<SellerPositionRecord | null>(null);
+  const [pendingDepositLamports, setPendingDepositLamports] =
+    useState<bigint | null>(null);
   const walletKey = wallet.publicKey?.toBase58() ?? null;
 
   useEffect(() => {
@@ -303,6 +333,7 @@ export default function DarkPool() {
     isDropping,
     faucetLog,
   } = useFaucet();
+  const mySlot = poolSnapshot?.mySlot ?? null;
 
   const refreshPool = useCallback(async (options?: { silent?: boolean }) => {
     if (!program || !wallet.publicKey) return;
@@ -357,9 +388,11 @@ export default function DarkPool() {
   useEffect(() => {
     if (!walletKey) {
       setPurchases([]);
+      setSellerPosition(null);
       return;
     }
     setPurchases(loadPurchaseHistory(walletKey));
+    setSellerPosition(loadSellerPosition(walletKey));
   }, [walletKey]);
 
   useEffect(() => {
@@ -380,10 +413,34 @@ export default function DarkPool() {
     });
   }, [walletKey, lastBuyReceipt]);
 
+  useEffect(() => {
+    if (!walletKey || !poolSnapshot || mySlot === null) return;
+    if (pendingDepositLamports === null) return;
+    const next = {
+      slot: mySlot,
+      depositedLamports: pendingDepositLamports.toString(),
+      fillBaselineLamports: poolSnapshot.myFilledLamports.toString(),
+      timestamp: Date.now(),
+    };
+    saveSellerPosition(walletKey, next);
+    setSellerPosition(next);
+    setPendingDepositLamports(null);
+  }, [walletKey, poolSnapshot, mySlot, pendingDepositLamports]);
+
+  useEffect(() => {
+    if (!walletKey || !poolSnapshot || mySlot !== null || !sellerPosition) {
+      return;
+    }
+    window.localStorage.removeItem(sellerPositionKey(walletKey));
+    setSellerPosition(null);
+  }, [walletKey, poolSnapshot, mySlot, sellerPosition]);
+
   const handleDeposit = () => {
     if (!provider || !depositSol || !priceUsdc) return;
+    const depositLamports = BigInt(Math.round(parseFloat(depositSol) * 1e9));
+    setPendingDepositLamports(depositLamports);
     deposit({
-      depositLamports: BigInt(Math.round(parseFloat(depositSol) * 1e9)),
+      depositLamports,
       pricePerToken: BigInt(Math.round(parseFloat(priceUsdc) * 1e6)),
       urgencyLevel: urgency,
     });
@@ -408,18 +465,52 @@ export default function DarkPool() {
   const manageBusy = ["sending", "waiting", "encrypting"].includes(manageStatus);
   const filledOrders = purchases.filter((p) => p.filledAmount > 0n).length;
   const walletState = wallet.publicKey ? shortKey(wallet.publicKey) : "—";
-  const mySlot = poolSnapshot?.mySlot ?? null;
   const myCredit = poolSnapshot?.myCredit ?? 0n;
   const myPendingCredit = poolSnapshot?.myPendingCredit ?? 0n;
   const poolSolVaultBalance = poolSnapshot?.poolSolVaultBalance ?? 0n;
   const copyUsdcMint = () => navigator.clipboard.writeText(USDC_MINT.toBase58());
   const occupiedSlots = poolSnapshot?.occupiedSlots ?? 0;
+  const externalSlots = poolSnapshot?.externalSlots ?? 0;
   const activeSlots = poolSnapshot?.activeSlots ?? 0;
   const hasLiquidity = activeSlots > 0 && poolSolVaultBalance > 0n;
+  const hasExternalLiquidity = externalSlots > 0 && poolSolVaultBalance > 0n;
+  const canBuyFromPool = hasExternalLiquidity && mySlot === null;
   const poolSoldOut =
     Boolean(poolSnapshot?.isInitialized) &&
     occupiedSlots > 0 &&
     poolSolVaultBalance === 0n;
+  const ownOnlyLiquidity =
+    wallet.publicKey &&
+    mySlot !== null &&
+    activeSlots > 0 &&
+    externalSlots === 0;
+  const trackedDeposit =
+    sellerPosition && sellerPosition.slot === mySlot
+      ? BigInt(sellerPosition.depositedLamports)
+      : null;
+  const trackedFillBaseline =
+    sellerPosition?.slot === mySlot && sellerPosition.fillBaselineLamports
+      ? BigInt(sellerPosition.fillBaselineLamports)
+      : null;
+  const slotFillsSinceDeposit =
+    trackedFillBaseline === null
+      ? null
+      : (poolSnapshot?.myFilledLamports ?? 0n) > trackedFillBaseline
+      ? (poolSnapshot?.myFilledLamports ?? 0n) - trackedFillBaseline
+      : 0n;
+  const trackedRemaining =
+    trackedDeposit !== null && slotFillsSinceDeposit !== null
+      ? trackedDeposit > slotFillsSinceDeposit
+        ? trackedDeposit - slotFillsSinceDeposit
+        : 0n
+      : null;
+  const ownSlotRemaining =
+    mySlot === null
+      ? null
+      : poolSoldOut
+      ? 0n
+      : trackedRemaining ??
+        (occupiedSlots === 1 && hasLiquidity ? poolSolVaultBalance : null);
   const totalFilled = purchases.reduce((sum, p) => sum + p.filledAmount, 0n);
   const poolState = !wallet.publicKey
     ? "OFFLINE"
@@ -434,8 +525,10 @@ export default function DarkPool() {
     : "READY";
   const buyButtonText = !wallet.publicKey
     ? "Connect Wallet First"
-    : !hasLiquidity
-    ? "Waiting for Liquidity"
+    : mySlot !== null
+    ? "Use Another Wallet To Buy"
+    : !hasExternalLiquidity
+    ? "Waiting for External Liquidity"
     : buyBusy
     ? "Processing"
     : "Encrypt and Route Buy";
@@ -576,11 +669,18 @@ export default function DarkPool() {
               </div>
             )}
 
-            {wallet.publicKey && !hasLiquidity && (
+            {wallet.publicKey && mySlot !== null && (
+              <div className="inline-alert warning">
+                This wallet owns an active seller slot. Use another wallet to
+                buy so you do not match against your own liquidity.
+              </div>
+            )}
+
+            {wallet.publicKey && mySlot === null && !hasExternalLiquidity && (
               <div className="inline-alert warning">
                 {poolSoldOut
                   ? "The private pool is sold out right now. The buy form will unlock as soon as a seller adds new SOL."
-                  : "No hidden sell liquidity is active yet. Add liquidity in Sell SOL, then this buy form will execute against the pool."}
+                  : "No external seller liquidity is active yet. Wait for another seller, or add liquidity from a different wallet."}
               </div>
             )}
 
@@ -624,7 +724,7 @@ export default function DarkPool() {
                 !buyAmtSol ||
                 !maxPriceUsdc ||
                 buyBusy ||
-                !hasLiquidity ||
+                !canBuyFromPool ||
                 Boolean(poolSnapshot?.isMatching)
               }
             >
@@ -690,6 +790,10 @@ export default function DarkPool() {
               <code>{fmtStatNumber(activeSlots)}</code>
             </div>
             <div className="side-metric">
+              <small>External slots</small>
+              <code>{fmtStatNumber(externalSlots)}</code>
+            </div>
+            <div className="side-metric">
               <small>Pool state</small>
               <code>{poolState}</code>
             </div>
@@ -702,6 +806,12 @@ export default function DarkPool() {
               across hidden seller slots and returns one blended result. Empty
               pools are blocked before settlement.
             </p>
+            {ownOnlyLiquidity && (
+              <p>
+                This wallet is the only active seller, so buy testing needs a
+                second wallet.
+              </p>
+            )}
           </aside>
         </section>
         )}
@@ -894,6 +1004,20 @@ export default function DarkPool() {
                   <span>Private slot</span>
                   <strong>#{mySlot + 1}</strong>
                 </div>
+                {trackedDeposit !== null && (
+                  <div className="manage-row">
+                    <span>Initial deposit</span>
+                    <strong>{fmtSol(trackedDeposit)}</strong>
+                  </div>
+                )}
+                <div className="manage-row">
+                  <span>SOL left</span>
+                  <strong>
+                    {ownSlotRemaining === null
+                      ? "Encrypted"
+                      : fmtSol(ownSlotRemaining)}
+                  </strong>
+                </div>
                 <div className="manage-row">
                   <span>Settled USDC credit</span>
                   <strong>{myCredit === 0n ? "—" : fmtCost(myCredit)}</strong>
@@ -915,6 +1039,13 @@ export default function DarkPool() {
                     The old slot credit is higher than the USDC currently held
                     by the pool. ArcSlicer will withdraw the settled USDC and
                     clear the stale remainder from this slot.
+                  </div>
+                )}
+                {ownSlotRemaining === null && (
+                  <div className="inline-alert">
+                    Your exact per-slot SOL balance is still encrypted. New
+                    deposits made from this browser are tracked locally, and
+                    cancelling the slot reveals the exact remainder.
                   </div>
                 )}
                 <div className="panel-note">
@@ -980,6 +1111,12 @@ export default function DarkPool() {
             <div className="side-metric">
               <small>Withdrawable credit</small>
               <code>{myCredit === 0n ? "—" : fmtCost(myCredit)}</code>
+            </div>
+            <div className="side-metric">
+              <small>SOL left</small>
+              <code>
+                {ownSlotRemaining === null ? "Encrypted" : fmtSol(ownSlotRemaining)}
+              </code>
             </div>
             {myPendingCredit > 0n && (
               <div className="side-metric">

@@ -51,11 +51,13 @@ export interface PoolSnapshot {
   isInitialized: boolean;
   isMatching: boolean;
   occupiedSlots: number;
+  externalSlots: number;
   activeSlots: number;
   mySlot: number | null;
   myRawCredit: bigint;
   myCredit: bigint;
   myPendingCredit: bigint;
+  myFilledLamports: bigint;
 }
 
 export interface PoolFillResult {
@@ -92,6 +94,12 @@ const friendlyPoolError = (e: any) => {
   }
   if (/PoolBusy/i.test(message)) {
     return "The private pool is matching another order. Try again in a moment.";
+  }
+  if (/OwnPoolLiquidityActive/i.test(message)) {
+    return "This wallet already has a seller slot. Use another wallet to buy, or cancel your sell slot first.";
+  }
+  if (/NoExternalPoolLiquidity/i.test(message)) {
+    return "No external seller liquidity is available for this wallet yet.";
   }
   if (/NoPoolLiquidity/i.test(message)) {
     return "No private liquidity is available right now. Wait for a seller to add SOL.";
@@ -173,10 +181,28 @@ export function usePrivatePool(
       const mySlot = owners.findIndex(
         (owner, i) => occupied[i] && owner.toBase58() === myKey
       );
+      const externalSlots = occupied.filter(
+        (isOccupied, i) => isOccupied && owners[i].toBase58() !== myKey
+      ).length;
       const rawCredit =
         mySlot >= 0 ? BigInt(account.accruedUsdc[mySlot].toString()) : 0n;
       const credit =
         rawCredit < poolUsdcVaultBalance ? rawCredit : poolUsdcVaultBalance;
+      let myFilledLamports = 0n;
+      if (mySlot >= 0) {
+        try {
+          const fills = await (program.account as any).poolFill.all();
+          for (const fill of fills) {
+            const fillAccount = fill.account as any;
+            if (!fillAccount.isSettled) continue;
+            if (!fillAccount.pool.equals(poolBook)) continue;
+            myFilledLamports += BigInt(fillAccount.slotFills[mySlot].toString());
+          }
+        } catch (error) {
+          console.warn("Could not read pool fill history:", error);
+          myFilledLamports = 0n;
+        }
+      }
       return {
         poolBook,
         poolWsolVault,
@@ -186,12 +212,15 @@ export function usePrivatePool(
         isInitialized: Boolean(account.isInitialized),
         isMatching: Boolean(account.isMatching),
         occupiedSlots,
+        externalSlots:
+          poolSolVaultBalance > 0n ? externalSlots : 0,
         activeSlots:
           poolSolVaultBalance > 0n ? occupiedSlots : 0,
         mySlot: mySlot >= 0 ? mySlot : null,
         myRawCredit: rawCredit,
         myCredit: credit,
         myPendingCredit: rawCredit > credit ? rawCredit - credit : 0n,
+        myFilledLamports,
       };
     } catch {
       return null;
@@ -389,8 +418,16 @@ export function usePrivatePool(
         setBuyStatus("encrypting");
         if (!cipher.ready) await cipher.init();
         const { poolBook, poolWsolVault, poolUsdcVault } = await ensurePool();
-        if ((await readTokenAmount(provider.connection, poolWsolVault)) === 0n) {
-          throw new Error("NoPoolLiquidity");
+        const snapshot = await fetchPool();
+        if (snapshot?.mySlot !== null && snapshot?.mySlot !== undefined) {
+          throw new Error("OwnPoolLiquidityActive");
+        }
+        if (
+          !snapshot ||
+          snapshot.poolSolVaultBalance === 0n ||
+          snapshot.externalSlots === 0
+        ) {
+          throw new Error("NoExternalPoolLiquidity");
         }
         const buyer = provider.wallet.publicKey;
         const buyerLamports = await provider.connection.getBalance(
