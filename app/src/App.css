@@ -111,9 +111,8 @@ svg {
 
 .hero-topline,
 .hero-layout,
-.action-bar,
-.hero-funds {
-  width: min(1360px, 100%);
+.action-bar {
+  width: 100%;
   margin-right: auto;
   margin-left: auto;
 }
@@ -131,7 +130,7 @@ svg {
 
 .hero-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-columns: minmax(0, 1fr) clamp(340px, 24vw, 450px);
   align-items: stretch;
   gap: 32px;
   margin-top: 32px;
@@ -228,16 +227,27 @@ svg {
 }
 
 .action-bar {
+  position: relative;
   min-height: 64px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
   margin-top: 28px;
+}
+
+.action-bar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 100vw;
   border-top: 1px solid var(--color-border);
+  transform: translateX(-50%);
 }
 
 .hero-funds {
+  width: auto;
   margin-left: auto;
 }
 
@@ -742,7 +752,7 @@ svg {
 }
 
 .app-content {
-  width: min(1320px, 100%);
+  width: 100%;
   margin: 0 auto;
   padding: 28px 40px;
 }
